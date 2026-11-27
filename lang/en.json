@@ -52,7 +52,7 @@
       },
       "timing": {
         "Name": "Precision Pulse",
-        "Help": "Space or click when the marker is in the golden zone",
+        "Help": "Space or click inside the golden zone (tracks morph and zones drift!)",
         "Teaser": "Space / click inside the golden zone"
       },
       "maze": {
@@ -67,8 +67,8 @@
       },
       "aim": {
         "Name": "Crystal Seals",
-        "Help": "Click golden seals before they expire · avoid crimson ✕ decoys",
-        "Teaser": "Mouse · Click golden seals quickly"
+        "Help": "Click golden & armored (×2) moving seals before expiry · avoid crimson ✕ decoys",
+        "Teaser": "Mouse · Hit moving seals and bursts"
       },
       "sigil": {
         "Name": "Rune Sequence",
@@ -77,8 +77,8 @@
       },
       "orbit": {
         "Name": "Vortex Orbit",
-        "Help": "A/D or ←/→ · orbit the core and slip through the gaps",
-        "Teaser": "A/D or ←/→ · Thread the ring gaps"
+        "Help": "A/D or ←/→ · orbit the core and slip through inward ring gaps",
+        "Teaser": "A/D or ←/→ · Slip through inward rings"
       }
     },
     "Overlay": {
