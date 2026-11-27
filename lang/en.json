@@ -28,7 +28,7 @@
     "Games": {
       "random": {
         "Name": "Random",
-        "Help": "Randomly picks one of the six trials"
+        "Help": "Randomly picks one of the ten trials"
       },
       "shards": {
         "Name": "Shardfall",
@@ -37,18 +37,18 @@
       },
       "resonance": {
         "Name": "Color Resonance",
-        "Help": "WASD / arrow keys · follow the rules for each wave",
+        "Help": "WASD / arrow keys · follow the rules for line and ring waves",
         "Teaser": "Blue — hold still · Amber — keep moving"
       },
       "beams": {
         "Name": "Resonator Beams",
-        "Help": "WASD / arrow keys · move out of the highlighted lanes",
-        "Teaser": "WASD / arrows · Step out of gold lanes"
+        "Help": "WASD / arrow keys · escape angled fans, crosses and sweeping beams",
+        "Teaser": "WASD / arrows · Keep moving to safe zones"
       },
       "gravity": {
         "Name": "Gravity",
-        "Help": "A/D or ←/→ · W/↑/Space to jump · S/↓ to fast-fall",
-        "Teaser": "Jump spikes · Stay low under floating prisms"
+        "Help": "A/D or ←/→ · W/↑/Space jump · S/↓ fast-fall · ride platforms & dodge stalactites",
+        "Teaser": "Ride platforms · Dodge stalactites & flips"
       },
       "timing": {
         "Name": "Precision Pulse",
@@ -59,6 +59,26 @@
         "Name": "Crystal Maze",
         "Help": "Guide the point to the golden finish with your mouse",
         "Teaser": "Mouse · Grab START and reach FINISH"
+      },
+      "shield": {
+        "Name": "Aegis Parry",
+        "Help": "WASD / arrow keys · face the shield toward spears (gold spears flip!)",
+        "Teaser": "WASD / arrows · Block incoming spears"
+      },
+      "aim": {
+        "Name": "Crystal Seals",
+        "Help": "Click golden seals before they expire · avoid crimson ✕ decoys",
+        "Teaser": "Mouse · Click golden seals quickly"
+      },
+      "sigil": {
+        "Name": "Rune Sequence",
+        "Help": "WASD / arrow keys · enter the rune combo (crimson ⇄ = press opposite)",
+        "Teaser": "WASD / arrows · Input the rune combo"
+      },
+      "orbit": {
+        "Name": "Vortex Orbit",
+        "Help": "A/D or ←/→ · orbit the core and slip through the gaps",
+        "Teaser": "A/D or ←/→ · Thread the ring gaps"
       }
     },
     "Overlay": {
@@ -68,6 +88,11 @@
       "Go": "GO!",
       "Mute": "Mute trial sounds on this client",
       "Unmute": "Unmute trial sounds on this client",
+      "Perfect": "PERFECT!",
+      "HitOk": "HIT!",
+      "Miss": "MISS",
+      "GravFlip": "GRAVITY",
+      "SigilInvert": "⇄ Crimson rune — press opposite direction",
       "Lives": "Lives: {lives} of {max}",
       "Timer": "{seconds} s",
       "Blue": "Blue — hold still",
@@ -80,7 +105,10 @@
       "Regrab": "Move the cursor back to the glowing point",
       "WatchingRegrab": "Waiting for the player to pick the point back up",
       "MazeGates": "Dashed gates are open · wait for solid gates to clear",
-      "TimingProgress": "Space or click in the gold zone · {hits}/{total} · need {required}"
+      "TimingProgress": "Space or click in the gold zone · {hits}/{total} · need {required}",
+      "AimProgress": "Click golden seals · {hits}/{total} · need {required}",
+      "SigilProgress": "Enter the rune sequence · {hits}/{total}",
+      "ShieldProgress": "Spears parried: {hits}"
     },
     "Result": {
       "Win": "SUCCESS!",
@@ -91,6 +119,8 @@
         "survived": "You survived the round",
         "timing": "Enough precise hits",
         "maze": "Finish reached",
+        "aim": "Seals shattered",
+        "sigil": "Sequence completed",
         "lives": "Out of lives",
         "missed": "Too few precise hits",
         "timeout": "Time is up",
@@ -127,10 +157,11 @@
       "Hit": "Damage or miss sound",
       "Telegraph": "Beam or wave warning sound",
       "BeamFire": "Beam firing sound",
-      "TimingHit": "Precise hit or initial maze pickup sound",
+      "TimingHit": "Precise hit, seal, rune or maze pickup sound",
       "Jump": "Gravity jump sound",
-      "ShardWave": "Shard storm warning sound",
+      "ShardWave": "Shard storm or vortex sound",
       "GateWarn": "Maze gate warning sound",
+      "ShieldBlock": "Shield parry sound",
       "Win": "Success sound",
       "Lose": "Failure sound",
       "Close": "Window close sound",

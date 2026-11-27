@@ -32,7 +32,15 @@ export class TrialOverlay {
     this.sound = new SoundManager();
     this.listeners = new AbortController();
     this.keys = new Set();
-    this.labels = {start: t("Overlay.MazeStart"), finish: t("Overlay.MazeFinish")};
+    this.labels = {
+      start: t("Overlay.MazeStart"),
+      finish: t("Overlay.MazeFinish"),
+      perfect: t("Overlay.Perfect"),
+      hitOk: t("Overlay.HitOk"),
+      miss: t("Overlay.Miss"),
+      gravFlip: t("Overlay.GravFlip"),
+      sigilInvert: t("Overlay.SigilInvert")
+    };
     this.number = new Intl.NumberFormat(game.i18n.lang, {minimumFractionDigits: 1, maximumFractionDigits: 1});
     this.reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
     this.pointer = null;
@@ -249,6 +257,30 @@ export class TrialOverlay {
         this.advance(this.getNow());
         this.press("timing");
       }, {signal});
+    } else if (this.session.gameType === "aim") {
+      const toPoint = event => {
+        const rect = active.canvas.getBoundingClientRect();
+        if (!rect.width || !rect.height) return null;
+        return {
+          x: clamp((event.clientX - rect.left) * WIDTH / rect.width, 0, WIDTH),
+          y: clamp((event.clientY - rect.top) * HEIGHT / rect.height, 0, HEIGHT)
+        };
+      };
+      active.canvas.addEventListener("pointermove", event => {
+        if (!event.isPrimary || this.finished || active.result) return;
+        const pt = toPoint(event);
+        if (pt) active.game.movePointer(pt);
+      }, {signal});
+      active.canvas.addEventListener("pointerdown", event => {
+        if (event.button !== 0 || !event.isPrimary || this.finished || active.result) return;
+        const pt = toPoint(event);
+        if (!pt) return;
+        this.advance(this.getNow());
+        if (this.started && !active.result && !this.finished) {
+          active.game.clickPointer(pt, this.time);
+          this.finishIfNeeded();
+        }
+      }, {signal});
     }
   }
 
@@ -280,8 +312,15 @@ export class TrialOverlay {
     this.advance(this.getNow());
     if (!this.started || active.result || this.finished) return;
     if (down) {
-      if (event.code === "Space" && this.session.gameType === "timing") this.press("timing");
-      if (JUMP.includes(event.code) && !alreadyJumping && this.session.gameType === "gravity") this.press("jump");
+      const gt = this.session.gameType;
+      if (event.code === "Space" && gt === "timing") this.press("timing");
+      if (JUMP.includes(event.code) && !alreadyJumping && gt === "gravity") this.press("jump");
+      if (gt === "shield" || gt === "sigil") {
+        if (UP.includes(event.code)) this.press("dir0");
+        else if (RIGHT.includes(event.code)) this.press("dir1");
+        else if (DOWN.includes(event.code)) this.press("dir2");
+        else if (LEFT.includes(event.code)) this.press("dir3");
+      }
     }
   }
 
@@ -418,7 +457,8 @@ export class TrialOverlay {
 
   handleSlotEvent(slot, event) {
     if (event !== "finish") {
-      this.reactSlot(slot, event, {x: slot.game.state.x, y: slot.game.state.y});
+      const {x, y, vx, vy} = slot.game.state;
+      this.reactSlot(slot, event, {x, y, vx, vy});
     }
     this.sendState(slot, event);
   }
@@ -461,6 +501,12 @@ export class TrialOverlay {
     } else if (event === "jump") {
       this.spawnParticles(slot, pos.x, pos.y + 8, "#c084fc", 6, 78, false, Math.PI / 2, 1.1);
       this.sound.play("Jump", soundScale * 0.85);
+    } else if (event === "block") {
+      slot.shake = Math.max(slot.shake, 2.5);
+      const bx = pos.x + (pos.vx ?? slot.view.vx ?? 0) * 28;
+      const by = pos.y + (pos.vy ?? slot.view.vy ?? -1) * 28;
+      this.spawnParticles(slot, bx, by, "#67e8f9", 9, 110, true);
+      this.sound.play("ShieldBlock", soundScale);
     }
   }
 
@@ -511,7 +557,10 @@ export class TrialOverlay {
     for (const snap of slot.snapshots) {
       if (!snap.reacted && (slot.renderTime >= snap.t || slot.result)) {
         snap.reacted = true;
-        if (snap.event) this.reactSlot(slot, snap.event, {x: snap.x, y: snap.y});
+        if (this.session.gameType === "aim" && (snap.event === "timingHit" || snap.event === "hit")) {
+          slot.game.syncSpectatorStrike?.(snap.x, snap.y, snap.t, snap.event);
+        }
+        if (snap.event) this.reactSlot(slot, snap.event, {x: snap.x, y: snap.y, vx: snap.vx, vy: snap.vy});
       }
     }
 
@@ -654,8 +703,18 @@ export class TrialOverlay {
         else if (difficulty === "hard" || difficulty === "insane") status = t("Overlay.MazeGates");
       } else if (gameType === "timing") {
         status = t("Overlay.TimingProgress", {
+          hits: slot.view.progress, total: slot.game.totalZones, required: slot.game.rules.required
+        });
+      } else if (gameType === "aim") {
+        status = t("Overlay.AimProgress", {
           hits: slot.view.progress, total: slot.game.rules.count, required: slot.game.rules.required
         });
+      } else if (gameType === "sigil") {
+        status = t("Overlay.SigilProgress", {
+          hits: slot.view.progress, total: slot.game.rules.length
+        });
+      } else if (gameType === "shield") {
+        status = t("Overlay.ShieldProgress", {hits: slot.view.progress});
       } else if (gameType === "resonance" && (difficulty === "hard" || difficulty === "insane")) {
         status = t("Overlay.ResonanceHard");
       }

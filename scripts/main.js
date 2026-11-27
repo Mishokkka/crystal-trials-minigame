@@ -1,6 +1,5 @@
 import {HEIGHT, WIDTH, clamp} from "./games/base.js";
 import {DIFFICULTIES, GAMES} from "./games/index.js";
-import {TIMING_RULES} from "./games/timing.js";
 import {GmLauncher} from "./gm-launcher.js";
 import {TrialOverlay} from "./overlay.js";
 import {MODULE_ID, SOCKET, element, serverTime, setting, t} from "./shared.js";
@@ -9,9 +8,9 @@ import {registerSoundSettings} from "./sound-manager.js";
 const START_LEAD_MS = 180;
 const WATCHDOG_GRACE_MS = 2500;
 const OBSERVER_GRACE_MS = 2200;
-const WIN_REASONS = ["survived", "timing", "maze"];
+const WIN_REASONS = ["survived", "timing", "maze", "aim", "sigil"];
 const LOSS_REASONS = ["lives", "missed", "timeout", "disconnected"];
-const STATE_EVENTS = ["hit", "timingHit", "jump", "finish"];
+const STATE_EVENTS = ["hit", "timingHit", "jump", "block", "finish"];
 
 let current = null;
 let launcher = null;
@@ -347,7 +346,7 @@ function receiveState(round, data, senderId) {
   if (!slot || senderId !== userId || slot.result || userId === game.user.id) return;
 
   const {gameType, difficulty} = round.session;
-  const maxProgress = gameType === "timing" ? TIMING_RULES[difficulty].count : Number(gameType === "maze");
+  const maxProgress = GAMES[gameType].maxProgress[DIFFICULTIES.indexOf(difficulty)];
   if (!Number.isSafeInteger(seq) || seq <= (slot.snapshot?.seq ?? 0)
     || !isBetween(simTime, 0, round.session.durationSec)
     || !isPosition(data) || !Number.isFinite(vx) || !Number.isFinite(vy) || typeof moving !== "boolean"

@@ -11,6 +11,7 @@ export const SOUND_FILES = {
   Jump: "jump.wav",
   ShardWave: "shard-wave.wav",
   GateWarn: "gate-warn.wav",
+  ShieldBlock: "shield-block.wav",
   Win: "win.wav",
   Lose: "lose.wav",
   Close: "close.wav",
