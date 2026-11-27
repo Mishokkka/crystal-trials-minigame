@@ -4,10 +4,14 @@ import argparse
 from dataclasses import dataclass
 from math import exp, pi, sin, sqrt
 from pathlib import Path
+import shutil
 from struct import pack
+import subprocess
+import tempfile
 import wave
 
-RETRO_RATE = 22050
+RETRO_RATE = 44100
+WAV_RETRO_RATE = 22050
 CRYSTAL_RATE = 22050
 OUTPUT = Path(__file__).resolve().parents[1] / "assets" / "sounds"
 
@@ -312,25 +316,49 @@ def write_wav(path: Path, samples: list[int], rate: int) -> None:
         wav.writeframes(pack(f"<{len(samples)}h", *samples))
 
 
+def encode_effect(event: str, samples: list[int], rate: int, output_dir: Path, fmt: str, tmp_dir: Path | None) -> None:
+    """Write a synthesized effect as WAV, OGG Vorbis, or MP3."""
+    if fmt == "wav":
+        write_wav(output_dir / f"{event}.wav", samples, rate)
+        return
+    assert tmp_dir is not None
+    tmp_wav = tmp_dir / f"{event}.wav"
+    write_wav(tmp_wav, samples, rate)
+    codec = ["-c:a", "libvorbis", "-q:a", "5"] if fmt == "ogg" else ["-c:a", "libmp3lame", "-q:a", "4"]
+    out_file = output_dir / f"{event}.{fmt}"
+    subprocess.run(
+        ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", str(tmp_wav), *codec, "-map_metadata", "-1", str(out_file)],
+        check=True,
+    )
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--style", choices=("retro", "crystal"), default="retro",
                         help="Synthesis preset style (default: retro)")
+    parser.add_argument("--format", dest="fmt", choices=("ogg", "wav", "mp3"), default="ogg",
+                        help="Output audio format (default: ogg)")
     parser.add_argument("--output", type=Path, default=OUTPUT,
-                        help="Output directory for generated .wav files")
+                        help="Output directory for generated audio files")
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
+    if args.fmt != "wav" and not shutil.which("ffmpeg"):
+        raise RuntimeError("ffmpeg is required for --format ogg/mp3 (or pass --format wav)")
     args.output.mkdir(parents=True, exist_ok=True)
-    if args.style == "crystal":
-        for event, voices in CRYSTAL_EFFECTS.items():
-            write_wav(args.output / f"{event}.wav", synthesize_crystal(voices, CRYSTAL_RATE), CRYSTAL_RATE)
-        return
+    rate = CRYSTAL_RATE if args.style == "crystal" else (WAV_RETRO_RATE if args.fmt == "wav" else RETRO_RATE)
 
-    for event, spec in RETRO_EFFECTS.items():
-        write_wav(args.output / f"{event}.wav", synthesize_retro(spec, RETRO_RATE), RETRO_RATE)
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_dir = Path(tmp) if args.fmt != "wav" else None
+        if args.style == "crystal":
+            for event, voices in CRYSTAL_EFFECTS.items():
+                encode_effect(event, synthesize_crystal(voices, rate), rate, args.output, args.fmt, tmp_dir)
+            return
+
+        for event, spec in RETRO_EFFECTS.items():
+            encode_effect(event, synthesize_retro(spec, rate), rate, args.output, args.fmt, tmp_dir)
 
 
 if __name__ == "__main__":

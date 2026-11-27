@@ -50,6 +50,7 @@ export class TrialOverlay {
     this.started = false;
     this.finished = false;
     this.closed = false;
+    this.pausedCanvasTicker = false;
     this.goUntil = -Infinity;
     this.clockTenth = null;
     this.clockLow = null;
@@ -197,7 +198,11 @@ export class TrialOverlay {
     document.body.append(this.root);
     this.root.showModal();
     panel.focus({preventScroll: true});
-    void this.sound.preload();
+    if (typeof canvas !== "undefined" && canvas?.ready && canvas?.app?.ticker?.started) {
+      this.pausedCanvasTicker = true;
+      canvas.app.ticker.stop();
+    }
+    if (!setting("muteLocal")) void this.sound.preload();
     this.sound.play("Open");
     this.frame(performance.now());
   }
@@ -856,6 +861,16 @@ export class TrialOverlay {
   close() {
     if (this.closed) return;
     this.closed = true;
+    if (this.pausedCanvasTicker) {
+      this.pausedCanvasTicker = false;
+      try {
+        if (typeof canvas !== "undefined" && canvas?.app?.ticker && !canvas.app.ticker.started) {
+          canvas.app.ticker.start();
+        }
+      } catch (error) {
+        console.warn(`${MODULE_ID} | Could not resume canvas ticker`, error);
+      }
+    }
     this.listeners.abort();
     this.keys.clear();
     cancelAnimationFrame(this.frameId);

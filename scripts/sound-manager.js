@@ -1,22 +1,31 @@
 import {MODULE_ID, setting} from "./shared.js";
 
 export const SOUND_FILES = {
-  Open: "open.wav",
-  Countdown: "countdown.wav",
-  Start: "start.wav",
-  Hit: "hit.wav",
-  Telegraph: "telegraph.wav",
-  BeamFire: "beam-fire.wav",
-  TimingHit: "timing-hit.wav",
-  Jump: "jump.wav",
-  ShardWave: "shard-wave.wav",
-  GateWarn: "gate-warn.wav",
-  ShieldBlock: "shield-block.wav",
-  Win: "win.wav",
-  Lose: "lose.wav",
-  Close: "close.wav",
+  Open: "open.ogg",
+  Countdown: "countdown.ogg",
+  Start: "start.ogg",
+  Hit: "hit.ogg",
+  Telegraph: "telegraph.ogg",
+  BeamFire: "beam-fire.ogg",
+  TimingHit: "timing-hit.ogg",
+  Jump: "jump.ogg",
+  ShardWave: "shard-wave.ogg",
+  GateWarn: "gate-warn.ogg",
+  ShieldBlock: "shield-block.ogg",
+  Win: "win.ogg",
+  Lose: "lose.ogg",
+  Close: "close.ogg",
   Bgm: ""
 };
+
+const LEGACY_WAV_MAP = new Map(
+  Object.values(SOUND_FILES)
+    .filter(Boolean)
+    .map(file => {
+      const ogg = `modules/${MODULE_ID}/assets/sounds/${file}`;
+      return [ogg.replace(/\.ogg$/, ".wav"), ogg];
+    })
+);
 
 const UNTRACKED = new Set(["Close", "Win", "Lose"]);
 const UNTHROTTLED = new Set(["Close", "Win", "Lose", "Open"]);
@@ -47,6 +56,11 @@ export function registerSoundSettings(onChange) {
       }
     });
   }
+}
+
+function soundSource(key) {
+  const raw = setting(`sound${key}`)?.trim() ?? "";
+  return LEGACY_WAV_MAP.get(raw) ?? raw;
 }
 
 function volume() {
@@ -119,13 +133,14 @@ async function ensureDecoded(src) {
 }
 
 export async function preloadSounds() {
+  if (setting("muteLocal")) return;
   try {
     if (game.audio?.locked && game.audio?.unlock) {
       await game.audio.unlock;
     }
     const sources = Object.keys(SOUND_FILES)
       .filter(key => key !== "Bgm")
-      .map(key => setting(`sound${key}`)?.trim())
+      .map(key => soundSource(key))
       .filter(Boolean);
     await Promise.all(sources.map(src => ensureDecoded(src)));
   } catch {
@@ -158,7 +173,7 @@ export class SoundManager {
   }
 
   play(key, scale = 1) {
-    const src = setting(`sound${key}`)?.trim();
+    const src = soundSource(key);
     const level = clampVolume(volume() * scale);
     // A browser that has not received a user gesture must not queue a round's worth of cues.
     if (!src || !level || game.audio.locked) return;
@@ -262,6 +277,7 @@ export class SoundManager {
     if (!base) {
       this.stopEffects();
     } else {
+      void preloadSounds();
       const ifaceScale = interfaceVolume();
       for (const effect of this.effects) {
         const target = clampVolume(base * effect.scale);
