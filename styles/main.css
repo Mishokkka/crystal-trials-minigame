@@ -1,0 +1,729 @@
+/* ==========================================================================
+   Trial Overlay (<dialog class="ct-dialog">) — Self-contained theme
+   ========================================================================== */
+dialog.ct-dialog {
+  --ct-text: #f5ecff;
+  --ct-muted: #c7afd9;
+  --ct-violet: #a855f7;
+  --ct-lilac: #c084fc;
+  --ct-pink: #e879f9;
+  --ct-accent: #a855f7;
+  --ct-glow: #9544eb44;
+
+  /* Lock Foundry v13 theme custom properties inside the overlay */
+  --color-text-primary: #f5ecff;
+  --color-text-secondary: #c7afd9;
+  --color-shadow-primary: #a855f7;
+  --button-background-color: #21142e;
+  --button-border-color: #8a5eb3;
+  --button-text-color: #f8eaff;
+  --button-hover-background-color: #382048;
+  --button-hover-border-color: #d896ff;
+
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  display: grid;
+  place-items: center;
+  user-select: none;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  border: 0;
+  background: radial-gradient(ellipse at center, #1e103866 0, #07050bc8 76%);
+  backdrop-filter: blur(5px);
+  color: var(--ct-text);
+  color-scheme: dark;
+  font: 500 14px/1.3 system-ui, sans-serif;
+  animation: ct-veil-in 240ms ease-out both;
+}
+
+dialog.ct-dialog.ct-diff-easy { --ct-accent: #38bdf8; --ct-glow: #38bdf840; }
+dialog.ct-dialog.ct-diff-medium { --ct-accent: #a855f7; --ct-glow: #9544eb44; }
+dialog.ct-dialog.ct-diff-hard { --ct-accent: #e879f9; --ct-glow: #e879f950; }
+dialog.ct-dialog.ct-diff-insane { --ct-accent: #ff4d6d; --ct-glow: #ff4d6d66; }
+
+dialog.ct-dialog:not([open]),
+dialog.ct-dialog .ct-banner[hidden],
+.ct-launcher .ct-launch-status[hidden] { display: none; }
+dialog.ct-dialog::backdrop { background: transparent; }
+dialog.ct-dialog:focus { outline: none; }
+dialog.ct-dialog :is(h2, p) { margin: 0; color: inherit; }
+dialog.ct-dialog * { box-sizing: border-box; }
+
+dialog.ct-dialog .ct-panel {
+  position: relative;
+  display: grid;
+  gap: 12px;
+  width: min(600px, calc(100vw - 24px), max(300px, calc((100dvh - 190px) * 1.33)));
+  padding: 16px 18px;
+  border: 1px solid color-mix(in srgb, var(--ct-accent) 70%, #ffffff 20%);
+  border-radius: 14px;
+  outline: none;
+  background: linear-gradient(155deg, #21152ef2, #110c1cf7 45%, #190e24f5);
+  color: #f5ecff;
+  box-shadow:
+    0 0 0 3px #1d112b,
+    0 24px 90px #030207e6,
+    0 0 38px var(--ct-glow),
+    inset 0 1px #ffffff29;
+  animation: ct-panel-in 270ms cubic-bezier(.18, .84, .32, 1) both;
+}
+
+dialog.ct-dialog .ct-panel.ct-duo {
+  width: min(1140px, calc(100vw - 24px), max(580px, calc((100dvh - 200px) * 2.55)));
+}
+
+dialog.ct-dialog .ct-header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+}
+
+dialog.ct-dialog .ct-emblem {
+  display: block;
+  position: relative;
+  width: 24px;
+  height: 32px;
+  background: conic-gradient(from 0deg at 50% 52%, #edc0ff, #7e40bd, var(--ct-accent), #e879f9, #edc0ff);
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+  filter: drop-shadow(0 0 8px var(--ct-glow));
+}
+
+dialog.ct-dialog .ct-emblem::after {
+  position: absolute;
+  inset: 8px 7px;
+  background: #fbe9ff;
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+  content: "";
+}
+
+dialog.ct-dialog .ct-identity { display: grid; gap: 4px; min-width: 0; }
+dialog.ct-dialog .ct-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 0;
+  color: #f5ecff;
+  text-shadow: none;
+  font: 700 clamp(16px, 3vw, 22px)/1.14 system-ui, sans-serif;
+}
+
+dialog.ct-dialog .ct-subrow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+dialog.ct-dialog .ct-mode { color: #c7afd9; font-size: 12px; font-weight: 600; }
+
+dialog.ct-dialog .ct-diff-badge,
+dialog.ct-dialog .ct-local-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  border: 1px solid #ffffff26;
+  background: #ffffff10;
+  color: #f5ecff;
+}
+
+dialog.ct-dialog .ct-diff-badge.ct-diff-easy { color: #7dd3fc; border-color: #38bdf855; background: #0c4a6e44; }
+dialog.ct-dialog .ct-diff-badge.ct-diff-medium { color: #d8b4fe; border-color: #a855f755; background: #4c1d9544; }
+dialog.ct-dialog .ct-diff-badge.ct-diff-hard { color: #f5d0fe; border-color: #e879f966; background: #701a7555; }
+dialog.ct-dialog .ct-diff-badge.ct-diff-insane {
+  color: #ffe4e6;
+  border-color: #ff4d6d99;
+  background: linear-gradient(90deg, #9f123988, #be123c88);
+  animation: ct-insane-pulse 1.3s ease-in-out infinite alternate;
+}
+
+dialog.ct-dialog .ct-local-badge { color: #8ff3cb; border-color: #8ff3cb55; background: #064e3b55; }
+
+dialog.ct-dialog .ct-header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+dialog.ct-dialog .ct-clock {
+  min-width: 62px;
+  padding: 5px 8px;
+  border: 1px solid #714697;
+  border-radius: 6px;
+  background: #130c1f;
+  color: #f5ecff;
+  font: 700 13px/1.15 ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  white-space: nowrap;
+}
+
+dialog.ct-dialog .ct-clock-low { color: #ffca9f; border-color: #e11d48; box-shadow: 0 0 12px #e11d4844; }
+
+dialog.ct-dialog button.ct-mute-btn,
+dialog.ct-dialog button.ct-quick-abort {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  flex: 0 0 auto;
+  min-height: 30px;
+  margin: 0;
+  padding: 4px 10px;
+  border: 1px solid #8a5eb3;
+  border-radius: 6px;
+  background: #21142e;
+  color: #f8eaff;
+  box-shadow: none;
+  font: 600 12px/1.2 system-ui, sans-serif;
+  cursor: pointer;
+}
+
+dialog.ct-dialog button.ct-mute-btn { width: 32px; padding: 0; }
+dialog.ct-dialog button.ct-mute-btn i { margin: 0; color: inherit; }
+dialog.ct-dialog button.ct-mute-btn[aria-pressed="true"] { color: #fca5a5; border-color: #b91c1c88; background: #2c1220; }
+dialog.ct-dialog button.ct-mute-btn:hover,
+dialog.ct-dialog button.ct-quick-abort:hover {
+  background: #382048;
+  border-color: #c084fc;
+  color: #ffffff;
+  box-shadow: 0 0 10px #a855f744;
+}
+dialog.ct-dialog button.ct-mute-btn:focus-visible,
+dialog.ct-dialog button.ct-quick-abort:focus-visible {
+  outline: 2px solid #e8b7ff;
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+dialog.ct-dialog .ct-arenas {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+}
+
+dialog.ct-dialog .ct-duo .ct-arenas {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+dialog.ct-dialog .ct-slot {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid #ffffff1c;
+  background: #0d0816b8;
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+
+dialog.ct-dialog .ct-slot-active {
+  border-color: color-mix(in srgb, var(--ct-accent) 75%, #ffffff 15%);
+  box-shadow: 0 0 18px var(--ct-glow);
+}
+
+dialog.ct-dialog .ct-slot-win { border-color: #34d399aa; box-shadow: 0 0 22px #10b98144; }
+dialog.ct-dialog .ct-slot-loss { border-color: #fb7185aa; box-shadow: 0 0 22px #e11d4844; }
+
+dialog.ct-dialog .ct-slot-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+dialog.ct-dialog .ct-slot-player {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+dialog.ct-dialog .ct-player-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  box-shadow: 0 0 8px currentColor;
+}
+
+dialog.ct-dialog .ct-role-badge {
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  background: #ffffff14;
+  color: #c7afd9;
+  white-space: nowrap;
+}
+
+dialog.ct-dialog .ct-slot-active .ct-role-badge {
+  background: color-mix(in srgb, var(--ct-accent) 32%, #1a0f2a);
+  color: #fff6ff;
+  border: 1px solid color-mix(in srgb, var(--ct-accent) 65%, transparent);
+}
+
+dialog.ct-dialog .ct-slot-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 700;
+  color: #f5ecff;
+}
+
+dialog.ct-dialog .ct-health { display: flex; gap: 5px; filter: drop-shadow(0 0 5px #e879f975); flex: 0 0 auto; }
+
+dialog.ct-dialog .ct-pip {
+  width: 9px;
+  height: 13px;
+  background: linear-gradient(115deg, #fbd5ff, #d487ff 48%, #9543db);
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+}
+
+dialog.ct-dialog .ct-pip.ct-spent { background: #4b365d; }
+dialog.ct-dialog .ct-pip.ct-pip-break { animation: ct-pip-break 320ms ease-out both; }
+
+dialog.ct-dialog .ct-stage {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid #d3b2ed99;
+  border-radius: 7px;
+  background: #0b0912;
+}
+
+dialog.ct-dialog .ct-canvas { display: block; width: 100%; height: auto; aspect-ratio: 4 / 3; touch-action: none; }
+
+dialog.ct-dialog .ct-timebar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: #ffffff14;
+  pointer-events: none;
+}
+
+dialog.ct-dialog .ct-timebar-fill {
+  width: 100%;
+  height: 100%;
+  transform-origin: left center;
+  background: linear-gradient(90deg, var(--ct-accent), #f0abfc);
+}
+
+dialog.ct-dialog .ct-timebar-fill.ct-timebar-low {
+  background: linear-gradient(90deg, #f43f5e, #fb923c);
+}
+
+dialog.ct-dialog .ct-status {
+  color: #c7afd9;
+  font-size: 12px;
+  min-height: 1.3em;
+}
+
+dialog.ct-dialog .ct-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 12px; }
+dialog.ct-dialog .ct-legend > span { display: inline-flex; gap: 7px; align-items: center; }
+dialog.ct-dialog .ct-legend > span::before { width: 8px; height: 9px; background: currentColor; border-radius: 1px; content: ""; }
+dialog.ct-dialog .ct-legend > .ct-legend-blue { color: #7bd8ff; }
+dialog.ct-dialog .ct-legend > .ct-legend-amber { color: #ffcb76; }
+dialog.ct-dialog .ct-legend > .ct-legend-amber::before { transform: rotate(45deg); }
+
+dialog.ct-dialog .ct-banner {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  background: #110b1ec9;
+  text-align: center;
+  pointer-events: none;
+}
+
+dialog.ct-dialog .ct-banner.ct-go-flash {
+  background: transparent;
+  animation: ct-go-fade 340ms ease-out both;
+}
+
+dialog.ct-dialog .ct-banner-title {
+  color: #fcddff;
+  font: 800 clamp(24px, 6vw, 46px)/1.05 system-ui, sans-serif;
+  letter-spacing: .06em;
+  text-shadow: 0 0 22px #ce54fd9c;
+}
+
+dialog.ct-dialog .ct-banner-detail { max-width: 34ch; color: #f5ecff; font-size: 13px; font-weight: 600; }
+
+dialog.ct-dialog .ct-banner-hint:not(:empty) {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid #d8b4fe44;
+  background: #231438cc;
+  color: #f3e8ff;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+dialog.ct-dialog .ct-slot-win .ct-banner-title { color: #96f4ce; text-shadow: 0 0 21px #50dc9877; }
+dialog.ct-dialog .ct-slot-loss .ct-banner-title { color: #ffb9c6; text-shadow: 0 0 21px #ee5b7e84; }
+
+dialog.ct-dialog .ct-pop { animation: ct-pop 230ms cubic-bezier(.22, 1.25, .45, 1) both; }
+dialog.ct-dialog.ct-closing { animation: ct-veil-out 230ms ease-in both; }
+dialog.ct-dialog.ct-closing .ct-panel { animation: ct-panel-out 230ms ease-in both; }
+
+@keyframes ct-veil-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ct-veil-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes ct-panel-in { from { opacity: 0; transform: translateY(20px) scale(.985); } }
+@keyframes ct-panel-out { to { opacity: 0; transform: translateY(14px) scale(.985); } }
+@keyframes ct-pop { from { opacity: 0.35; transform: scale(1.28); } to { opacity: 1; transform: scale(1); } }
+@keyframes ct-go-fade { 0% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1.16); } }
+@keyframes ct-pip-break { 0% { transform: scale(1.55) rotate(-14deg); filter: brightness(2); } 100% { transform: scale(1); } }
+@keyframes ct-insane-pulse { from { box-shadow: 0 0 4px #ff4d6d44; } to { box-shadow: 0 0 12px #ff4d6daa; } }
+
+/* ==========================================================================
+   GM Launcher (#ct-launcher.ct-launcher) — Fully isolated from Foundry themes
+   ========================================================================== */
+#ct-launcher.ct-launcher {
+  --background: #170f24;
+  --color-bg: #170f24;
+  --color-text-primary: #f6eaff;
+  --color-text-secondary: #d8c2ee;
+  --color-text-subtle: #b99cd4;
+  --color-border: #795496;
+  --color-border-light-primary: #795496;
+  --color-shadow-primary: #a855f7;
+  --input-background-color: #140d21;
+  --input-border-color: #795496;
+  --input-text-color: #f8ecff;
+  --input-focus-outline-color: #c084fc;
+  --checkbox-background-color: #140d21;
+  --checkbox-border-color: #8b5fbf;
+  --checkbox-checked-color: #9333ea;
+  --checkbox-checkmark-color: #ffffff;
+  --button-background-color: #321e49;
+  --button-border-color: #9e67c9;
+  --button-text-color: #f8ecff;
+  --button-hover-background-color: #462a66;
+  --button-hover-border-color: #d896ff;
+
+  background: linear-gradient(155deg, #241536, #140e1f 52%, #190f26) !important;
+  border: 1px solid #9e67c9 !important;
+  border-radius: 12px;
+  box-shadow: 0 18px 50px #030207c8, 0 0 24px #a855f740 !important;
+  color: #f6eaff !important;
+  color-scheme: dark;
+  backdrop-filter: none !important;
+  overflow: hidden;
+}
+
+#ct-launcher.ct-launcher .window-header {
+  background: linear-gradient(90deg, #2c1845, #1b112c) !important;
+  border-bottom: 1px solid #79549688 !important;
+  color: #f6eaff !important;
+}
+
+#ct-launcher.ct-launcher .window-header .window-title {
+  color: #f6eaff !important;
+  font-family: system-ui, sans-serif;
+  font-weight: 700;
+  text-shadow: none !important;
+}
+
+#ct-launcher.ct-launcher .window-header .window-icon {
+  color: #e879f9 !important;
+}
+
+#ct-launcher.ct-launcher .window-header .header-control {
+  color: #d8c2ee !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+#ct-launcher.ct-launcher .window-header .header-control:hover {
+  color: #ffffff !important;
+  background: #ffffff14 !important;
+}
+
+#ct-launcher.ct-launcher .window-content {
+  background: linear-gradient(155deg, #241536, #140e1f 52%, #190f26) !important;
+  backdrop-filter: none !important;
+  color: #f6eaff !important;
+  color-scheme: dark;
+  padding: 12px 14px 14px;
+}
+
+#ct-launcher.ct-launcher .ct-launch-form {
+  display: grid;
+  gap: 10px;
+  padding: 2px;
+  color: #f6eaff !important;
+  font: 500 13px/1.3 system-ui, sans-serif;
+}
+
+#ct-launcher.ct-launcher .ct-field {
+  display: grid;
+  gap: 4px;
+  color: #e8d4f8 !important;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+#ct-launcher.ct-launcher .ct-field > span {
+  color: #e8d4f8 !important;
+}
+
+#ct-launcher.ct-launcher .ct-field-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+#ct-launcher.ct-launcher .ct-field :is(input, select) {
+  width: 100%;
+  min-height: 32px;
+  padding: 4px 8px;
+  border: 1px solid #795496 !important;
+  border-radius: 6px;
+  background: #140d21 !important;
+  color: #f8ecff !important;
+  box-shadow: none !important;
+  outline: none !important;
+  font: 500 13px/1.25 system-ui, sans-serif;
+}
+
+#ct-launcher.ct-launcher .ct-field :is(input, select):focus,
+#ct-launcher.ct-launcher .ct-field :is(input, select):focus-visible {
+  border-color: #d896ff !important;
+  box-shadow: 0 0 0 2px #a855f755 !important;
+  outline: none !important;
+}
+
+#ct-launcher.ct-launcher .ct-field select option {
+  background-color: #1b1228 !important;
+  color: #f8ecff !important;
+}
+
+#ct-launcher.ct-launcher .ct-mode-preview {
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid #79549688;
+  background: #140d21;
+  color: #dfd0f0;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+#ct-launcher.ct-launcher .ct-mode-preview.ct-preview-insane {
+  border-color: #ff4d6d99;
+  background: #271022;
+  color: #ffd4dd;
+}
+
+#ct-launcher.ct-launcher .ct-checkbox-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #e8d4f8 !important;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+#ct-launcher.ct-launcher .ct-checkbox-field > span {
+  color: #e8d4f8 !important;
+}
+
+#ct-launcher.ct-launcher input[type="checkbox"] {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  border: 1px solid #8b5fbf !important;
+  border-radius: 4px;
+  background: #140d21 !important;
+  color: #ffffff !important;
+  accent-color: #a855f7;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+#ct-launcher.ct-launcher input[type="checkbox"]::before {
+  color: #8b5fbf !important;
+  background: transparent !important;
+  border-color: #8b5fbf !important;
+}
+
+#ct-launcher.ct-launcher input[type="checkbox"]:checked {
+  background: #7c3aed !important;
+  border-color: #c084fc !important;
+}
+
+#ct-launcher.ct-launcher input[type="checkbox"]:checked::before,
+#ct-launcher.ct-launcher input[type="checkbox"]:checked::after {
+  color: #ffffff !important;
+  border-color: #ffffff !important;
+}
+
+#ct-launcher.ct-launcher input[type="checkbox"]:focus-visible {
+  border-color: #d896ff !important;
+  box-shadow: 0 0 0 2px #a855f755 !important;
+}
+
+#ct-launcher.ct-launcher input[type="checkbox"]:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+#ct-launcher.ct-launcher .ct-launch-actions {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 1fr 1.45fr;
+}
+
+#ct-launcher.ct-launcher .ct-launch-actions button {
+  min-height: 33px;
+  margin: 0;
+  border: 1px solid #9e67c9 !important;
+  border-radius: 6px;
+  background: #321e49 !important;
+  color: #f8ecff !important;
+  box-shadow: none !important;
+  font: 650 12px/1.2 system-ui, sans-serif;
+  cursor: pointer;
+}
+
+#ct-launcher.ct-launcher .ct-launch-actions .ct-launch-button {
+  background: #7443a5 !important;
+  border-color: #c084fc !important;
+}
+
+#ct-launcher.ct-launcher .ct-launch-actions button:not(:disabled):hover {
+  background: #472b67 !important;
+  border-color: #d896ff !important;
+  box-shadow: 0 0 12px #a855f744 !important;
+}
+
+#ct-launcher.ct-launcher .ct-launch-actions .ct-launch-button:not(:disabled):hover {
+  background: #8951c4 !important;
+}
+
+#ct-launcher.ct-launcher .ct-launch-actions button:focus-visible {
+  outline: 2px solid #e8b7ff !important;
+  outline-offset: 2px;
+}
+
+#ct-launcher.ct-launcher .ct-launch-actions button:disabled {
+  background: #241736 !important;
+  border-color: #5b4175 !important;
+  color: #b59cc9 !important;
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+#ct-launcher.ct-launcher .ct-launch-status {
+  margin: 0;
+  color: #e7b8ff !important;
+  font-size: 12px;
+}
+
+/* ==========================================================================
+   Chat Card (.ct-chat-card) — Self-contained regardless of Foundry theme
+   ========================================================================== */
+.ct-chat-card {
+  display: grid;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid #79549677;
+  border-inline-start: 3px solid #a855f7;
+  border-radius: 7px;
+  background: linear-gradient(155deg, #221434, #140d21) !important;
+  color: #f5ecff !important;
+  font-family: system-ui, sans-serif;
+}
+.ct-chat-card.ct-chat-win { border-inline-start-color: #34d399; }
+.ct-chat-card.ct-chat-loss { border-inline-start-color: #fb7185; }
+.ct-chat-card.ct-chat-mixed { border-inline-start-color: #f59e0b; }
+
+.ct-chat-card .ct-chat-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.ct-chat-card .ct-chat-title { font-size: 13px; color: #f8ecff !important; }
+.ct-chat-card .ct-chat-diff {
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  border: 1px solid currentColor;
+  background: #ffffff10;
+}
+.ct-chat-card .ct-chat-diff.ct-diff-easy { color: #7dd3fc; }
+.ct-chat-card .ct-chat-diff.ct-diff-medium { color: #d8b4fe; }
+.ct-chat-card .ct-chat-diff.ct-diff-hard { color: #f5d0fe; }
+.ct-chat-card .ct-chat-diff.ct-diff-insane { color: #fda4af; background: #9f123966; }
+
+.ct-chat-card .ct-chat-rows { display: grid; gap: 5px; }
+.ct-chat-card .ct-chat-row {
+  padding-top: 4px;
+  border-top: 1px solid #d8b4fe24;
+}
+.ct-chat-card .ct-chat-row-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 12px;
+}
+.ct-chat-card .ct-chat-player { color: #f5ecff !important; }
+.ct-chat-card .ct-row-win .ct-chat-outcome { color: #6ee7b7 !important; }
+.ct-chat-card .ct-row-loss .ct-chat-outcome { color: #fda4af !important; }
+.ct-chat-card .ct-chat-row-detail { font-size: 11px; color: #cbb4df !important; }
+
+@media (max-width: 760px) {
+  dialog.ct-dialog .ct-panel.ct-duo { width: min(560px, calc(100vw - 24px)); }
+  dialog.ct-dialog .ct-duo .ct-arenas { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 480px) {
+  dialog.ct-dialog .ct-panel { gap: 8px; padding: 11px; }
+  dialog.ct-dialog .ct-header { gap: 8px; }
+  dialog.ct-dialog .ct-health { gap: 3px; }
+  dialog.ct-dialog .ct-pip { width: 7px; height: 10px; }
+  dialog.ct-dialog .ct-status, dialog.ct-dialog .ct-legend { font-size: 11px; }
+}
+
+@media (max-height: 460px) {
+  dialog.ct-dialog { place-items: start center; }
+  dialog.ct-dialog .ct-panel { padding: 9px; gap: 7px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  dialog.ct-dialog,
+  dialog.ct-dialog .ct-panel,
+  dialog.ct-dialog .ct-pop,
+  dialog.ct-dialog .ct-go-flash,
+  dialog.ct-dialog .ct-pip-break,
+  dialog.ct-dialog .ct-diff-insane {
+    animation: none !important;
+  }
+}
