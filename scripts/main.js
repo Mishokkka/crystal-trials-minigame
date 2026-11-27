@@ -3,7 +3,7 @@ import {DIFFICULTIES, GAMES} from "./games/index.js";
 import {GmLauncher} from "./gm-launcher.js";
 import {TrialOverlay} from "./overlay.js";
 import {MODULE_ID, SOCKET, element, serverTime, setting, t} from "./shared.js";
-import {preloadSounds, registerSoundSettings} from "./sound-manager.js";
+import {preloadSounds, registerSoundSettings, syncInterfaceVolume} from "./sound-manager.js";
 
 const START_LEAD_MS = 180;
 const WATCHDOG_GRACE_MS = 2500;
@@ -341,7 +341,7 @@ function receiveStart(data, sender) {
 }
 
 function receiveState(round, data, senderId) {
-  const {userId, seq, t: simTime, x, y, vx, vy, moving, lives, progress, activeStarted, invulnerableUntil, tracking, event} = data;
+  const {userId, seq, t: simTime, x, y, vx, vy, moving, lives, progress, activeStarted, invulnerableUntil, tracking, attemptsMask, event} = data;
   const slot = round.slots.get(userId);
   if (!slot || senderId !== userId || slot.result || userId === game.user.id) return;
 
@@ -355,8 +355,11 @@ function receiveState(round, data, senderId) {
     || typeof activeStarted !== "boolean" || !isBetween(invulnerableUntil, 0, round.session.durationSec + 0.75)
     || (event != null && !STATE_EVENTS.includes(event))) return;
   if (gameType === "maze" && typeof tracking !== "boolean") return;
+  if (gameType === "timing" && attemptsMask !== undefined
+    && (!Number.isInteger(attemptsMask) || !isBetween(attemptsMask, 0, (1 << maxProgress) - 1))) return;
 
   slot.snapshot = {seq, t: simTime, x, y, vx, vy, moving, lives, progress, activeStarted, invulnerableUntil, tracking, event: event ?? undefined};
+  if (attemptsMask !== undefined) slot.snapshot.attemptsMask = attemptsMask;
   round.overlay.receiveState(userId, slot.snapshot);
 }
 
@@ -431,6 +434,7 @@ Hooks.once("ready", () => {
   void preloadSounds();
   game.socket.on(SOCKET, receive);
   game.socket.on("disconnect", () => current?.overlay.close());
+  Hooks.on("globalInterfaceVolumeChanged", volume => syncInterfaceVolume(volume));
   Hooks.on("controlToken", () => launcher?.refreshPlayers(true));
   Hooks.on("userConnected", () => {
     launcher?.refreshPlayers();

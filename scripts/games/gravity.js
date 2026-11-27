@@ -5,6 +5,18 @@ const CEILING = 45;
 const GROUND = FLOOR - 10;
 const CEIL_GROUND = CEILING + 10;
 const PLAT_OFFSET = 52;
+const STAL_HEIGHT = 58;
+
+function hitsStalactite(px, py, col, tipY, surfDir, r) {
+  const hw = col.w / 2;
+  const dx = Math.abs(px - (col.x + hw));
+  const dy = surfDir === 1 ? tipY - py : py - tipY;
+  if (dy >= 0 && dy <= STAL_HEIGHT && dx <= hw * (dy / STAL_HEIGHT)) return true;
+  const lenSq = hw * hw + STAL_HEIGHT * STAL_HEIGHT;
+  const t = clamp((dx * hw + dy * STAL_HEIGHT) / lenSq, 0, 1);
+  if ((dx - t * hw) ** 2 + (dy - t * STAL_HEIGHT) ** 2 < r * r) return true;
+  return Math.max(0, dx - hw) ** 2 + (dy - STAL_HEIGHT) ** 2 < r * r;
+}
 
 const LEVELS = {
   easy: {
@@ -116,18 +128,24 @@ export class GravityGame extends ArenaGame {
             ? this.between(68, 165)
             : this.between(WIDTH - 165, WIDTH - 68);
           const safeHalf = 62;
+          const safeLeft = safeCenter - safeHalf;
+          const safeRight = safeCenter + safeHalf;
           const cols = [];
-          // Left block if space
-          if (safeCenter - safeHalf > 42) {
-            cols.push({x: this.between(24, safeCenter - safeHalf - 36), w: this.between(34, 42)});
+          // Left block if space (respecting block width so corridor stays >= 124px)
+          const leftW = this.between(34, 42);
+          if (safeLeft - leftW >= 24) {
+            cols.push({x: this.between(24, safeLeft - leftW), w: leftW});
           }
-          // Center block forcing player off center
-          if (Math.abs(WIDTH / 2 - safeCenter) > safeHalf + 20) {
-            cols.push({x: WIDTH / 2 - 20 + this.between(-18, 18), w: 40});
+          // Center block forcing player off center without intruding into safe corridor
+          const centerW = 40;
+          const centerX = WIDTH / 2 - centerW / 2 + this.between(-18, 18);
+          if (centerX + centerW <= safeLeft || centerX >= safeRight) {
+            cols.push({x: centerX, w: centerW});
           }
           // Right block if space
-          if (safeCenter + safeHalf < WIDTH - 42) {
-            cols.push({x: this.between(safeCenter + safeHalf, WIDTH - 62), w: this.between(34, 42)});
+          const rightW = this.between(34, 42);
+          if (safeRight + rightW <= WIDTH - 24) {
+            cols.push({x: this.between(safeRight, WIDTH - 24 - rightW), w: rightW});
           }
           if (cols.length) {
             this.rows.push({
@@ -278,11 +296,12 @@ export class GravityGame extends ArenaGame {
         const span = FLOOR - CEILING;
         if (travel > span + 80) continue;
         const tipY = row.surfDir === 1 ? CEILING + travel : FLOOR - travel;
-        const tailY = row.surfDir === 1 ? tipY - 58 : tipY + 58;
+        const tailY = row.surfDir === 1 ? tipY - STAL_HEIGHT : tipY + STAL_HEIGHT;
         const yTop = Math.min(tipY, tailY);
         const yBot = Math.max(tipY, tailY);
-        if (state.y + SOUL_RADIUS - 2 > yTop && state.y - SOUL_RADIUS + 2 < yBot) {
-          if (row.cols.some(c => state.x + SOUL_RADIUS - 2 > c.x && state.x - SOUL_RADIUS + 2 < c.x + c.w)) {
+        const hitR = SOUL_RADIUS - 2;
+        if (state.y + hitR > yTop && state.y - hitR < yBot) {
+          if (row.cols.some(c => hitsStalactite(state.x, state.y, c, tipY, row.surfDir, hitR))) {
             this.damage(time);
           }
         }

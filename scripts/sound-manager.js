@@ -35,6 +35,7 @@ const DUPLICATE_COOLDOWN_MS = 28;
 const decodedBuffers = new Map();
 const loadingBuffers = new Map();
 const failedBuffers = new Set();
+const interfaceGains = new Map();
 
 export function registerSoundSettings(onChange) {
   game.settings.register(MODULE_ID, "masterVolume", {
@@ -91,6 +92,28 @@ function interfaceVolume() {
     return Number.isFinite(value) ? clampVolume(value) : 1;
   } catch {
     return 1;
+  }
+}
+
+function getInterfaceOutput(ctx) {
+  let node = interfaceGains.get(ctx);
+  if (!node && typeof ctx?.createGain === "function") {
+    node = ctx.createGain();
+    node.gain.value = interfaceVolume();
+    node.connect(ctx.destination);
+    interfaceGains.set(ctx, node);
+  }
+  return node ?? ctx.destination;
+}
+
+export function syncInterfaceVolume(volumeArg) {
+  const level = Number.isFinite(volumeArg) ? clampVolume(volumeArg) : interfaceVolume();
+  for (const [ctx, node] of interfaceGains) {
+    if (ctx.state === "closed") {
+      interfaceGains.delete(ctx);
+      continue;
+    }
+    node.gain.value = level;
   }
 }
 
@@ -192,9 +215,8 @@ export class SoundManager {
         const source = ctx.createBufferSource();
         source.buffer = buffer;
         const gain = ctx.createGain();
-        gain.gain.value = clampVolume(level * interfaceVolume());
-        const iface = game.audio?.interface;
-        const dest = (iface && iface.context === ctx) ? iface : ctx.destination;
+        gain.gain.value = clampVolume(level);
+        const dest = getInterfaceOutput(ctx);
         source.connect(gain);
         gain.connect(dest);
         if (!UNTRACKED.has(key)) {
@@ -278,10 +300,10 @@ export class SoundManager {
       this.stopEffects();
     } else {
       void preloadSounds();
-      const ifaceScale = interfaceVolume();
+      syncInterfaceVolume();
       for (const effect of this.effects) {
         const target = clampVolume(base * effect.scale);
-        if (effect.gain) effect.gain.gain.value = clampVolume(target * ifaceScale);
+        if (effect.gain) effect.gain.gain.value = target;
         else if (effect.sound) effect.sound.volume = target;
       }
     }

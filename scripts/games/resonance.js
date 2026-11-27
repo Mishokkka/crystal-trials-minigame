@@ -153,6 +153,17 @@ export class ResonanceGame extends ArenaGame {
             ctx.lineWidth = 2;
             if (!wave.amber) ctx.setLineDash([6, 8]);
             ctx.stroke();
+          } else {
+            const pulseR = Math.max(SOUL_RADIUS, r + wave.width * 0.5);
+            ctx.fillStyle = color;
+            ctx.globalAlpha = 0.22;
+            ctx.beginPath();
+            ctx.arc(WIDTH / 2, HEIGHT / 2, pulseR + 7, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 0.48;
+            ctx.beginPath();
+            ctx.arc(WIDTH / 2, HEIGHT / 2, pulseR, 0, Math.PI * 2);
+            ctx.fill();
           }
         }
         ctx.restore();

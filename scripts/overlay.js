@@ -8,6 +8,14 @@ const RIGHT = ["KeyD", "ArrowRight"];
 const UP = ["KeyW", "ArrowUp"];
 const DOWN = ["KeyS", "ArrowDown"];
 const JUMP = [...UP, "Space"];
+
+function codeToDir(code) {
+  if (UP.includes(code)) return 0;
+  if (RIGHT.includes(code)) return 1;
+  if (DOWN.includes(code)) return 2;
+  if (LEFT.includes(code)) return 3;
+  return -1;
+}
 const BLOCKED = new Set([
   ...LEFT, ...RIGHT, ...UP, ...DOWN, "Space", "Escape", "Delete", "Backspace",
   "Digit0", "Digit1", "Digit2", "Digit3", "Digit4", "Digit5", "Digit6", "Digit7", "Digit8", "Digit9",
@@ -56,6 +64,7 @@ export class TrialOverlay {
     this.pausedCanvasTicker = false;
     this.lastRaf = 0;
     this.bgTimer = null;
+    this.shieldDir = -1;
     this.goUntil = -Infinity;
     this.clockTenth = null;
     this.clockLow = null;
@@ -352,6 +361,13 @@ export class TrialOverlay {
     if (down) this.keys.add(event.code);
     else this.keys.delete(event.code);
 
+    const dir = codeToDir(event.code);
+    if (down && dir >= 0) {
+      this.shieldDir = dir;
+    } else if (!down && !this.started && dir >= 0) {
+      this.shieldDir = this.held(UP) ? 0 : this.held(RIGHT) ? 1 : this.held(DOWN) ? 2 : this.held(LEFT) ? 3 : -1;
+    }
+
     this.advance(this.getNow());
     if (!this.started || active.result || this.finished) return;
     if (down) {
@@ -369,6 +385,7 @@ export class TrialOverlay {
 
   clearInput() {
     this.keys.clear();
+    this.shieldDir = -1;
     this.leavePointer();
   }
 
@@ -481,7 +498,8 @@ export class TrialOverlay {
     const input = {
       x: Number(this.held(RIGHT)) - Number(this.held(LEFT)),
       y: Number(this.held(DOWN)) - Number(this.held(UP)),
-      jump: this.held(JUMP)
+      jump: this.held(JUMP),
+      dir: this.shieldDir
     };
     while (this.simulated < this.time && !active.game.result) {
       const dt = Math.min(STEP, this.time - this.simulated);
@@ -560,12 +578,13 @@ export class TrialOverlay {
     const now = performance.now();
     if (!slot.active || (!event && now - slot.lastSend < SEND_INTERVAL)) return;
     slot.lastSend = now;
-    const {x, y, vx, vy, moving, lives, progress, activeStarted, invulnerableUntil, tracking} = slot.game.state;
+    const {x, y, vx, vy, moving, lives, progress, activeStarted, invulnerableUntil, tracking, attemptsMask} = slot.game.state;
     const payload = {
       seq: ++slot.sequence,
       t: clamp(this.simulated, 0, this.session.durationSec),
       x, y, vx, vy, moving, lives, progress, activeStarted, invulnerableUntil, tracking
     };
+    if (attemptsMask !== undefined) payload.attemptsMask = attemptsMask;
     if (event !== undefined) payload.event = event;
     this.publishState(slot.userId, payload);
   }
@@ -613,6 +632,8 @@ export class TrialOverlay {
         snap.reacted = true;
         if (this.session.gameType === "aim" && (snap.event === "timingHit" || snap.event === "hit")) {
           slot.game.syncSpectatorStrike?.(snap.x, snap.y, snap.t, snap.event);
+        } else if (this.session.gameType === "timing" && (snap.event === "timingHit" || snap.event === "hit")) {
+          slot.game.syncSpectatorStrike?.(snap.t, snap.event);
         }
         if (snap.event) this.reactSlot(slot, snap.event, {x: snap.x, y: snap.y, vx: snap.vx, vy: snap.vy});
       }
@@ -853,7 +874,10 @@ export class TrialOverlay {
     if (!slot) return;
     if (slot.result && !(slot.result.fromWatchdog && !result.fromWatchdog)) return;
     slot.result = result;
-    if (slot.active) this.keys.clear();
+    if (slot.active) {
+      this.keys.clear();
+      this.shieldDir = -1;
+    }
 
     slot.card.classList.remove("ct-slot-win", "ct-slot-loss");
     slot.card.classList.add(result.success ? "ct-slot-win" : "ct-slot-loss");
@@ -883,6 +907,7 @@ export class TrialOverlay {
     if (this.finished) return;
     this.finished = true;
     this.keys.clear();
+    this.shieldDir = -1;
     this.sound.endRound();
     this.paint(performance.now(), 0, true);
     this.holdId = setTimeout(() => {
@@ -906,6 +931,7 @@ export class TrialOverlay {
     }
     this.listeners.abort();
     this.keys.clear();
+    this.shieldDir = -1;
     cancelAnimationFrame(this.frameId);
     clearInterval(this.bgTimer);
     this.bgTimer = null;

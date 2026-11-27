@@ -33,6 +33,8 @@ export class ShieldGame extends ArenaGame {
     super(session, onEvent);
     this.cfg = LEVELS[session.difficulty];
     this.facing = 0;
+    this.prevInputX = 0;
+    this.prevInputY = 0;
     this.state.x = CX;
     this.state.y = CY;
     this.state.vx = 0;
@@ -91,10 +93,16 @@ export class ShieldGame extends ArenaGame {
   }
 
   update(dt, time, input) {
-    if (input.y < 0) this.setFacing(0);
-    else if (input.x > 0) this.setFacing(1);
-    else if (input.y > 0) this.setFacing(2);
-    else if (input.x < 0) this.setFacing(3);
+    if (Number.isInteger(input?.dir)) {
+      if (input.dir >= 0) this.setFacing(input.dir);
+    } else if (input) {
+      if (input.y < 0 && this.prevInputY >= 0) this.setFacing(0);
+      else if (input.x > 0 && this.prevInputX <= 0) this.setFacing(1);
+      else if (input.y > 0 && this.prevInputY <= 0) this.setFacing(2);
+      else if (input.x < 0 && this.prevInputX >= 0) this.setFacing(3);
+      this.prevInputX = input.x;
+      this.prevInputY = input.y;
+    }
     this.state.moving = true;
 
     for (const spear of this.spears) {

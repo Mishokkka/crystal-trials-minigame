@@ -240,10 +240,16 @@ export class TimingGame extends ArenaGame {
 
     this.totalZones = zoneId;
     this.attempts = new Set();
+    this.state.attemptsMask = 0;
     this.strikes = [];
     const pt0 = evalTrack(this.passes[0].track, this.passes[0].forward ? 0 : 1);
     this.state.x = pt0.x;
     this.state.y = pt0.y;
+  }
+
+  markAttempt(id) {
+    this.attempts.add(id);
+    this.state.attemptsMask |= (1 << id);
   }
 
   zoneCenterU(zone, time) {
@@ -251,14 +257,14 @@ export class TimingGame extends ArenaGame {
     return zone.u0 + Math.sin(time * zone.driftFreq + zone.driftPhase) * zone.driftAmp;
   }
 
-  sliderAt(time) {
+  sliderAt(time, mask = this.state.attemptsMask) {
     let index = this.passes.findIndex(pass => time < pass.end);
     if (index === -1) index = this.passes.length - 1;
     const pass = this.passes[index];
     const ratio = clamp((time - pass.start) / (pass.end - pass.start), 0, 1);
     const u = pass.forward ? ratio : 1 - ratio;
     const pos = evalTrack(pass.track, u);
-    const activeZones = pass.zones.filter(z => !this.attempts.has(z.id));
+    const activeZones = pass.zones.filter(z => !(mask & (1 << z.id)));
     const focus = activeZones[0] ?? pass.zones.at(-1);
     return {
       index, pass, u, pos, zones: pass.zones, focus,
@@ -285,7 +291,7 @@ export class TimingGame extends ArenaGame {
     this.state.y = pos.y;
     const matched = pending.find(z => Math.abs(u - this.zoneCenterU(z, time)) <= z.halfU + 0.008);
     if (matched) {
-      this.attempts.add(matched.id);
+      this.markAttempt(matched.id);
       this.state.progress++;
       const distU = Math.abs(u - this.zoneCenterU(matched, time));
       const kind = distU <= matched.coreHalfU + 0.004 ? "perfect" : "hit";
@@ -298,10 +304,21 @@ export class TimingGame extends ArenaGame {
     }
 
     const missedZone = pending[0];
-    this.attempts.add(missedZone.id);
+    this.markAttempt(missedZone.id);
     this.strikes.push({x: pos.x, y: pos.y, time, kind: "miss"});
     this.damage(time, 0.22);
     this.checkEarlyLoss(time);
+  }
+
+  syncSpectatorStrike(time, event = "timingHit") {
+    const sl = this.sliderAt(time);
+    if (event === "hit") {
+      this.strikes.push({x: sl.pos.x, y: sl.pos.y, time, kind: "miss"});
+      return;
+    }
+    const z = sl.pass.zones.find(zone => Math.abs(sl.u - this.zoneCenterU(zone, time)) <= zone.halfU + 0.02);
+    const kind = z && Math.abs(sl.u - this.zoneCenterU(z, time)) <= z.coreHalfU + 0.008 ? "perfect" : "hit";
+    this.strikes.push({x: sl.pos.x, y: sl.pos.y, time, kind});
   }
 
   update(dt, time) {
@@ -317,7 +334,7 @@ export class TimingGame extends ArenaGame {
           ? (time >= pass.end || (sl.pass === pass && sl.u > z.u0 + edgeOffset))
           : (time >= pass.end || (sl.pass === pass && sl.u < z.u0 - edgeOffset));
         if (!pastZone) continue;
-        this.attempts.add(z.id);
+        this.markAttempt(z.id);
         const zp = evalTrack(pass.track, this.zoneCenterU(z, time));
         this.strikes.push({x: zp.x, y: zp.y, time, kind: "miss"});
         this.damage(time, 0.22);
@@ -332,7 +349,8 @@ export class TimingGame extends ArenaGame {
   }
 
   draw(ctx, time, state, labels = {}) {
-    const {index, pass, u, pos, zones, focus, forward, live} = this.sliderAt(time);
+    const mask = state.attemptsMask ?? this.state.attemptsMask ?? 0;
+    const {index, pass, u, pos, zones, focus, forward, live} = this.sliderAt(time, mask);
     const {track} = pass;
     const cap = track.shape === "circle" ? "butt" : "round";
 
@@ -363,7 +381,7 @@ export class TimingGame extends ArenaGame {
     let anyInZone = false;
     ctx.lineCap = "butt";
     for (const z of zones) {
-      const done = this.attempts.has(z.id);
+      const done = Boolean(mask & (1 << z.id));
       const zc = this.zoneCenterU(z, time);
       ctx.save();
       if (done) ctx.globalAlpha = 0.28;

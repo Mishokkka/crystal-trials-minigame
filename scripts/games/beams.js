@@ -67,26 +67,28 @@ export class BeamsGame extends ArenaGame {
       const end = fire + fireDur;
       const maxReach = this.cfg.moveSpeed * (fire - cue) * 0.75;
 
-      const activeEarlier = this.attacks.filter(a => a.end > fire && a.fire < end);
+      const maxCheckEnd = Math.max(end, fire + 0.55);
+      const activeEarlier = this.attacks.filter(a => a.end > fire && a.fire < maxCheckEnd);
       let bestVolley = null;
       let bestScore = -1;
       let bestSafeProbes = null;
 
       for (let attempt = 0; attempt < 12; attempt++) {
         const beams = this.generateCandidate(cue, fire, end, prevSafe);
+        const checkEnd = Math.max(end, ...beams.map(b => b.end));
         const combined = [...activeEarlier, ...beams];
-        const safeFrac = this.measureSafeFraction(combined, fire, end);
+        const safeFrac = this.measureSafeFraction(combined, fire, checkEnd);
         if (safeFrac < this.cfg.minSafeFrac) continue;
 
         const safeProbes = PROBES.filter(p =>
-          !this.pointHitInInterval(combined, p.x, p.y, fire, end)
+          !this.pointHitInInterval(combined, p.x, p.y, fire, checkEnd)
         );
         const reachable = safeProbes.some(sp =>
           prevSafe.some(ps => Math.hypot(sp.x - ps.x, sp.y - ps.y) <= maxReach)
         );
         if (!reachable) continue;
 
-        const coveredPrev = prevSafe.filter(ps => this.pointHitInInterval(beams, ps.x, ps.y, fire, end)).length;
+        const coveredPrev = prevSafe.filter(ps => this.pointHitInInterval(beams, ps.x, ps.y, fire, checkEnd)).length;
         const score = coveredPrev * 10 + safeFrac;
         if (score > bestScore) {
           bestScore = score;
@@ -219,11 +221,16 @@ export class BeamsGame extends ArenaGame {
       if (time < attack.cue || time >= attack.end) continue;
       const aiming = time < attack.fire;
       const angle = aiming ? attack.angle : attack.angle + attack.spin * (time - attack.fire);
-      const pts = borderIntersections(attack.cx, attack.cy, angle);
-      if (!pts) continue;
-      const [p1, p2] = pts;
       const dx = Math.cos(angle), dy = Math.sin(angle);
       const nx = -dy, ny = dx;
+      const centerDist = Math.abs((WIDTH / 2 - attack.cx) * nx + (HEIGHT / 2 - attack.cy) * ny);
+      if (centerDist > 300 + attack.width / 2 + 16) continue;
+      const proj = (WIDTH / 2 - attack.cx) * dx + (HEIGHT / 2 - attack.cy) * dy;
+      const midX = attack.cx + dx * proj;
+      const midY = attack.cy + dy * proj;
+      const p1 = {x: midX - dx * 360, y: midY - dy * 360};
+      const p2 = {x: midX + dx * 360, y: midY + dy * 360};
+      const emitters = borderIntersections(attack.cx, attack.cy, angle);
 
       ctx.save();
       if (aiming) {
@@ -267,8 +274,8 @@ export class BeamsGame extends ArenaGame {
       } else {
         ctx.lineCap = "butt";
         ctx.beginPath();
-        ctx.moveTo(p1.x - dx * 20, p1.y - dy * 20);
-        ctx.lineTo(p2.x + dx * 20, p2.y + dy * 20);
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
 
         ctx.strokeStyle = fireGlow;
         ctx.globalAlpha = 0.22;
@@ -286,12 +293,15 @@ export class BeamsGame extends ArenaGame {
         ctx.stroke();
       }
 
-      const emitterColor = aiming ? (attack.spin !== 0 ? PALETTE.crimson : PALETTE.gold) : fireGlow;
-      ctx.globalAlpha = 1;
-      drawGlow(ctx, p1.x, p1.y, 16, emitterColor, 0.35);
-      drawGlow(ctx, p2.x, p2.y, 16, emitterColor, 0.35);
-      crystal(ctx, p1.x, p1.y, 8, 11, emitterColor, angle + Math.PI / 2);
-      crystal(ctx, p2.x, p2.y, 8, 11, emitterColor, angle + Math.PI / 2);
+      if (emitters) {
+        const [e1, e2] = emitters;
+        const emitterColor = aiming ? (attack.spin !== 0 ? PALETTE.crimson : PALETTE.gold) : fireGlow;
+        ctx.globalAlpha = 1;
+        drawGlow(ctx, e1.x, e1.y, 16, emitterColor, 0.35);
+        drawGlow(ctx, e2.x, e2.y, 16, emitterColor, 0.35);
+        crystal(ctx, e1.x, e1.y, 8, 11, emitterColor, angle + Math.PI / 2);
+        crystal(ctx, e2.x, e2.y, 8, 11, emitterColor, angle + Math.PI / 2);
+      }
       ctx.restore();
     }
     drawSoul(ctx, state, time);

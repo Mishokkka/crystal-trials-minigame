@@ -36,7 +36,7 @@
 - Музыка на время раунда по умолчанию отключена; при выборе файла зацикливается до конца игры.
 - Каждый игрок может нажать кнопку громкости прямо в шапке оверлея или включить `muteLocal` в настройках клиента.
 
-Исходник звуков находится в `tools/generate-sounds.py`. Для повторной генерации запустите `python tools/generate-sounds.py` из папки модуля (`--format wav|mp3`, `--style crystal`).
+Исходник звуков находится в `tools/generate-sounds.py`. Для повторной генерации `.ogg` (по умолчанию; требуется `ffmpeg` в `PATH`) запустите `python tools/generate-sounds.py` из папки модуля. Для генерации без `ffmpeg` используйте `python tools/generate-sounds.py --format wav` (также поддерживаются `--format mp3` и `--style crystal`).
 
 ## Макросы GM
 

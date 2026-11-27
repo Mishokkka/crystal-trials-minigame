@@ -21,7 +21,7 @@
 - [scripts/games/](scripts/games/) — реализации 10 мини-игр: `shards.js`, `resonance.js`, `beams.js`, `gravity.js`, `timing.js`, `maze.js`, `shield.js`, `aim.js`, `sigil.js`, `orbit.js`.
 - [styles/main.css](styles/main.css) — полностью изолированные от темы Foundry стили оверлея (`dialog.ct-dialog`), лаунчера (`#ct-launcher.ct-launcher`) и карточки чата (`.ct-chat-card`).
 - [lang/ru.json](lang/ru.json), [lang/en.json](lang/en.json) — полная двуязычная локализация с паритетом ключей и плейсхолдеров.
-- [tools/generate-sounds.py](tools/generate-sounds.py) и `assets/sounds/*.wav` — офлайн-генератор (Python stdlib) и 14 монофонических 16-bit PCM WAV-эффектов (22050 Гц).
+- [tools/generate-sounds.py](tools/generate-sounds.py) и `assets/sounds/*.ogg` — офлайн-генератор (Python stdlib; для вывода OGG/MP3 требуется `ffmpeg`) и 14 звуковых эффектов в формате OGG Vorbis.
 
 ## Мультиплеер, сокеты и синхронизация
 
