@@ -6,6 +6,10 @@ const GROUND = FLOOR - 10;
 const CEIL_GROUND = CEILING + 10;
 const PLAT_OFFSET = 52;
 const STAL_HEIGHT = 58;
+const LAVA_LEAD = 0.38;
+const LAVA_TAIL = 14;
+const LAVA_RECOVERY = 0.30;
+const FLIP_SETTLE = 0.67;
 
 function hitsStalactite(px, py, col, tipY, surfDir, r) {
   const hw = col.w / 2;
@@ -25,15 +29,15 @@ const LEVELS = {
   },
   medium: {
     moveSpeed: 230, warning: 0.48, speed: [235, 280], interval: [1.08, 1.32],
-    heights: [26, 52], maxChain: 3, gateChance: 0.28, stalChance: 0.32, lavaCount: 1, flipCount: 0
+    heights: [26, 52], maxChain: 3, gateChance: 0.28, stalChance: 0.32, lavaSpeed: [225, 255], lavaCount: 1, flipCount: 0
   },
   hard: {
     moveSpeed: 252, warning: 0.42, speed: [305, 390], interval: [0.85, 1.06],
-    heights: [30, 62], maxChain: 3, gateChance: 0.36, stalChance: 0.38, lavaCount: 1, flipCount: 1
+    heights: [30, 62], maxChain: 3, gateChance: 0.36, stalChance: 0.38, lavaSpeed: [250, 285], lavaCount: 1, flipCount: 1
   },
   insane: {
-    moveSpeed: 272, warning: 0.37, speed: [345, 435], interval: [0.72, 0.90],
-    heights: [32, 66], maxChain: 4, gateChance: 0.42, stalChance: 0.42, lavaCount: 2, flipCount: 2
+    moveSpeed: 272, warning: 0.37, speed: [360, 450], interval: [0.70, 0.85],
+    heights: [32, 66], maxChain: 4, gateChance: 0.42, stalChance: 0.42, lavaSpeed: [280, 315], lavaCount: 2, flipCount: 2
   }
 };
 
@@ -48,6 +52,11 @@ export class GravityGame extends ArenaGame {
     this.flips = [];
     this.buildFlips();
     this.buildGauntlet();
+    for (const flip of this.flips) {
+      flip.cueStart = flip.start - 0.65;
+      flip.cueEnd = flip.end - 0.55;
+      this.cues.push({time: flip.cueStart, sound: "Telegraph"}, {time: flip.cueEnd, sound: "Telegraph"});
+    }
     this.cues.sort((a, b) => a.time - b.time);
   }
 
@@ -56,14 +65,12 @@ export class GravityGame extends ArenaGame {
     if (this.hard && this.random() >= 0.6) return;
     const f1Start = this.between(3.2, 4.3);
     const f1End = Math.min(this.duration - 2.0, f1Start + this.between(3.3, 3.7));
-    this.flips.push({start: f1Start, end: f1End, cueStart: f1Start - 0.65, cueEnd: f1End - 0.55});
-    this.cues.push({time: f1Start - 0.65, sound: "Telegraph"}, {time: f1End - 0.55, sound: "Telegraph"});
+    this.flips.push({start: f1Start, end: f1End});
 
     if (this.cfg.flipCount >= 2 && f1End + 4.8 < this.duration && this.random() < 0.7) {
       const f2Start = f1End + this.between(1.6, 2.0);
       const f2End = Math.min(this.duration - 1.1, f2Start + this.between(3.2, 3.6));
-      this.flips.push({start: f2Start, end: f2End, cueStart: f2Start - 0.65, cueEnd: f2End - 0.55});
-      this.cues.push({time: f2Start - 0.65, sound: "Telegraph"}, {time: f2End - 0.55, sound: "Telegraph"});
+      this.flips.push({start: f2Start, end: f2End});
     }
   }
 
@@ -78,6 +85,43 @@ export class GravityGame extends ArenaGame {
     return this.flips.some(f =>
       Math.abs(time - f.start) < 0.85 || Math.abs(time - f.end) < 0.85
     );
+  }
+
+  rowEnd(row) {
+    if (row.kind === "stalactite") return row.start + (FLOOR - CEILING + STAL_HEIGHT) / row.speed;
+    if (row.kind === "lava") return row.start + (WIDTH + row.surgeLen + LAVA_TAIL) / row.speed;
+    const width = row.kind === "gate" ? row.width : row.sizes.reduce((span, spike) => span + spike.width + 3, -3);
+    return row.start + (WIDTH + width) / row.speed;
+  }
+
+  buildLava(impact, direction, surfDir) {
+    const {warning} = this.cfg;
+    const speed = this.between(...this.cfg.lavaSpeed);
+    const surgeLen = this.between(330, 420);
+    const transitions = this.flips.flatMap(({start, end}) => [start, end]);
+    const lastFlip = transitions.filter(time => time <= impact).at(-1) ?? -Infinity;
+    const nextFlip = transitions.find(time => time > impact) ?? Infinity;
+    const clearTime = this.rows.reduce((latest, row) => Math.max(latest, this.rowEnd(row)), 0);
+    const platStart = Math.max(warning + 0.05, impact - WIDTH / 2 / speed - LAVA_LEAD,
+      clearTime + 0.22, lastFlip + FLIP_SETTLE);
+    if (platStart >= nextFlip) return null;
+
+    const row = {kind: "lava", start: platStart + LAVA_LEAD, platStart, direction, speed,
+      platW: surgeLen + speed * LAVA_LEAD + LAVA_TAIL, surgeLen, surgeH: 30, surfDir};
+    const deckEnd = this.rowEnd(row);
+    if (deckEnd + LAVA_RECOVERY > this.duration) return null;
+    const flipAfter = deckEnd + (surfDir === -1 ? 0.55 : 0.65);
+    const delay = flipAfter - nextFlip;
+    if (delay > 0) {
+      const activeOrFirst = surfDir === -1 || nextFlip === this.flips[0].start;
+      if (activeOrFirst && flipAfter + (surfDir === -1 ? FLIP_SETTLE : 2 * FLIP_SETTLE) > this.duration) return null;
+      this.flips = this.flips.map(flip => flip.end <= impact ? flip : {
+        start: flip.start <= impact ? flip.start : flip.start + delay,
+        end: Math.min(flip.end + delay, this.duration - FLIP_SETTLE)
+      }).filter(flip => flip.end - flip.start >= FLIP_SETTLE);
+    }
+    this.cues.push({time: Math.min(platStart, row.start - warning), sound: "Telegraph"});
+    return row;
   }
 
   buildGauntlet() {
@@ -95,30 +139,16 @@ export class GravityGame extends ArenaGame {
 
       // Lava wave with rideable floating platform
       if (lavasPlaced < lavaCount && !nearFlip && impact > 2.2 && impact < this.duration - 2.3 && this.random() < 0.35) {
-        const speed = this.between(150, 185);
-        const platW = this.between(96, 114);
-        const surgeLen = this.between(330, 420);
-        const start = Math.max(warning + 0.08, impact - WIDTH / 2 / speed);
-        const platStart = Math.max(warning + 0.05, start - 0.55);
-        if (start < this.duration - 2.0) {
-          this.rows.push({
-            kind: "lava",
-            start,
-            platStart,
-            direction,
-            speed,
-            platW,
-            surgeLen,
-            surgeH: 30,
-            surfDir
-          });
+        const row = this.buildLava(impact, direction, surfDir);
+        if (row) {
+          this.rows.push(row);
           lavasPlaced++;
-          impact += surgeLen / speed + 0.95;
+          impact = this.rowEnd(row) + LAVA_RECOVERY + WIDTH / 2 / speedRange[0];
           continue;
         }
       }
 
-      // Falling stalactites targeting center + side, guaranteeing >=110px continuous safe corridor
+      // Falling stalactites targeting center + side, guaranteeing >=124px continuous safe corridor
       if (!nearFlip && this.random() < stalChance) {
         const start = Math.max(warning + 0.65, impact - 0.35);
         const dropWarn = Math.max(0.56, warning + 0.20);
@@ -208,7 +238,7 @@ export class GravityGame extends ArenaGame {
         }
       }
 
-      impact += Math.max(0.74, this.between(...interval));
+      impact += Math.max(this.insane ? 0.71 : 0.74, this.between(...interval));
     }
   }
 
@@ -280,11 +310,8 @@ export class GravityGame extends ArenaGame {
       state.y = platSurface;
       state.vy = 0;
     }
-    if (dir === 1 && state.y >= groundY) {
-      state.y = groundY;
-      state.vy = 0;
-    } else if (dir === -1 && state.y <= groundY) {
-      state.y = groundY;
+    if (state.y >= GROUND || state.y <= CEIL_GROUND) {
+      state.y = clamp(state.y, CEIL_GROUND, GROUND);
       state.vy = 0;
     }
     state.moving = Math.hypot(state.vx, state.vy) > 12;
@@ -474,8 +501,8 @@ export class GravityGame extends ArenaGame {
             ctx.fillStyle = "#fda4af";
             for (let rx = sx + 12; rx < sx + row.surgeLen - 12; rx += 22) {
               ctx.beginPath();
-              ctx.moveTo(rx - 9, row.surfDir === 1 ? rSurf : rSurf);
-              ctx.lineTo(rx, row.surfDir === 1 ? rSurf - row.surgeH - 5 : rSurf + row.surgeH + 5);
+              ctx.moveTo(rx - 9, rSurf);
+              ctx.lineTo(rx, rSurf - row.surfDir * row.surgeH);
               ctx.lineTo(rx + 9, rSurf);
               ctx.fill();
             }
