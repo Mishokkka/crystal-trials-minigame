@@ -1,0 +1,140 @@
+{
+  "CrystalTrials": {
+    "Title": "Crystal Trials: Minigames",
+    "Launcher": {
+      "Player": "Player",
+      "Player1": "Player 1",
+      "Player2": "Player 2 (side-by-side)",
+      "NoSecondPlayer": "— None (1 player) —",
+      "Game": "Minigame",
+      "Difficulty": "Difficulty",
+      "Lives": "Lives",
+      "CustomTitle": "Trial title (optional)",
+      "LocalTest": "Local playtest (only me, no chat)",
+      "LocalTestHint": "Available only when running solo as GM without a second player",
+      "DurationHint": "{seconds} s · {help}",
+      "Start": "Launch",
+      "Abort": "Force close",
+      "Test": "GM playtest ({gm})",
+      "Running": "{player} is playing.",
+      "RunningDuo": "{p1} and {p2} are playing."
+    },
+    "Difficulty": {
+      "easy": "Easy",
+      "medium": "Medium",
+      "hard": "Hard",
+      "insane": "INSANE"
+    },
+    "Games": {
+      "random": {
+        "Name": "Random",
+        "Help": "Randomly picks one of the six trials"
+      },
+      "shards": {
+        "Name": "Shardfall",
+        "Help": "WASD / arrow keys · dodge crystal swarms from all directions",
+        "Teaser": "WASD / arrows · Dodge incoming crystals"
+      },
+      "resonance": {
+        "Name": "Color Resonance",
+        "Help": "WASD / arrow keys · follow the rules for each wave",
+        "Teaser": "Blue — hold still · Amber — keep moving"
+      },
+      "beams": {
+        "Name": "Resonator Beams",
+        "Help": "WASD / arrow keys · move out of the highlighted lanes",
+        "Teaser": "WASD / arrows · Step out of gold lanes"
+      },
+      "gravity": {
+        "Name": "Gravity",
+        "Help": "A/D or ←/→ · W/↑/Space to jump · S/↓ to fast-fall",
+        "Teaser": "Jump spikes · Stay low under floating prisms"
+      },
+      "timing": {
+        "Name": "Precision Pulse",
+        "Help": "Space or click when the marker is in the golden zone",
+        "Teaser": "Space / click inside the golden zone"
+      },
+      "maze": {
+        "Name": "Crystal Maze",
+        "Help": "Guide the point to the golden finish with your mouse",
+        "Teaser": "Mouse · Grab START and reach FINISH"
+      }
+    },
+    "Overlay": {
+      "RoleActive": "Your turn",
+      "RoleSpectator": "Watching",
+      "GetReady": "Get ready",
+      "Go": "GO!",
+      "Mute": "Mute trial sounds on this client",
+      "Unmute": "Unmute trial sounds on this client",
+      "Lives": "Lives: {lives} of {max}",
+      "Timer": "{seconds} s",
+      "Blue": "Blue — hold still",
+      "Amber": "Amber — keep moving",
+      "ResonanceHard": "Follow the color rule until the wave has passed through you",
+      "MazeStart": "START",
+      "MazeFinish": "FINISH",
+      "GrabStart": "Hover over START or click it",
+      "WatchingStart": "Waiting for the player to pick up the point",
+      "Regrab": "Move the cursor back to the glowing point",
+      "WatchingRegrab": "Waiting for the player to pick the point back up",
+      "MazeGates": "Dashed gates are open · wait for solid gates to clear",
+      "TimingProgress": "Space or click in the gold zone · {hits}/{total} · need {required}"
+    },
+    "Result": {
+      "Win": "SUCCESS!",
+      "Lose": "FAILED!",
+      "Success": "Success",
+      "Failure": "Failure",
+      "Reasons": {
+        "survived": "You survived the round",
+        "timing": "Enough precise hits",
+        "maze": "Finish reached",
+        "lives": "Out of lives",
+        "missed": "Too few precise hits",
+        "timeout": "Time is up",
+        "disconnected": "Player disconnected"
+      }
+    },
+    "Chat": {
+      "Summary": "{player} · {mode} · {result}",
+      "Stats": "Hits taken: {hits} · Time: {seconds} s",
+      "LocalBadge": "Local test"
+    },
+    "Errors": {
+      "OnlyGM": "Only a GM can open the launcher or run trial macros.",
+      "NotConnected": "Wait for Foundry to connect to the world.",
+      "AlreadyRunning": "Wait for the current trial to finish or force it closed.",
+      "PlayerUnavailable": "Choose a connected player or yourself for a GM playtest.",
+      "SamePlayers": "Choose two different players for a duo trial.",
+      "LocalOnlyRequiresGM": "Local playtest is only available for a solo GM.",
+      "InvalidOptions": "Pick a difficulty and between 1 and 5 lives.",
+      "InvalidMode": "Unknown trial mode."
+    },
+    "Settings": {
+      "postToChat": {"Name": "Post results to chat", "Hint": "Shows the player, mode, outcome, hits taken and elapsed time."},
+      "endHoldMs": {"Name": "Result display time (ms)", "Hint": "How long the result stays on screen before the window closes."},
+      "countdownSec": {"Name": "Countdown (seconds)", "Hint": "How long the player has to prepare before the round starts."},
+      "masterVolume": {"Name": "Trial volume", "Hint": "Master volume for trial sounds, from 0 to 1."},
+      "muteLocal": {"Name": "Mute sounds on this client", "Hint": "Mutes trial effects and music in this browser."},
+      "SoundHint": "Select an audio file. Clear the path to disable the sound."
+    },
+    "Sounds": {
+      "Open": "Window open sound",
+      "Countdown": "Countdown tick",
+      "Start": "Round start sound",
+      "Hit": "Damage or miss sound",
+      "Telegraph": "Beam or wave warning sound",
+      "BeamFire": "Beam firing sound",
+      "TimingHit": "Precise hit or initial maze pickup sound",
+      "Jump": "Gravity jump sound",
+      "ShardWave": "Shard storm warning sound",
+      "GateWarn": "Maze gate warning sound",
+      "Win": "Success sound",
+      "Lose": "Failure sound",
+      "Close": "Window close sound",
+      "Bgm": "Looping round music"
+    }
+  }
+}
