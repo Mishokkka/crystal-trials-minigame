@@ -1,0 +1,53 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+
+language: "ru-RU"
+tone_instructions: "Дружеский модуль для доверенного стола. Фокусируйся на реальных багах, стабильности, рассинхронах, утечках слушателей/таймеров и API Foundry v13. Не придирайся к мелочам стиля и не требуй античит-защиты уровня продакшн-ММО."
+
+reviews:
+  profile: "chill"
+  request_changes_workflow: false
+  high_level_summary: true
+  collapse_walkthrough: false
+  changed_files_summary: true
+  sequence_diagrams: true
+  review_status: true
+  poem: false
+  auto_review:
+    enabled: true
+    drafts: false
+    auto_incremental_review: true
+  path_filters:
+    - "!assets/sounds/**"
+  path_instructions:
+    - path: "scripts/**/*.js"
+      instructions: |
+        Нативные ES-модули для Foundry VTT v13 (Core 13.351) без шага сборки и без внешних зависимостей.
+        Модуль строго системно-независим и никогда не должен менять документы актёров, токенов, предметов или эффектов.
+        Глобалы вроде `game`, `Hooks`, `CONFIG`, `foundry`, `ui`, `canvas` предоставляет ядро Foundry VTT v13;
+        `game.socket.on("module.<id>", (data, senderId) => ...)` получает `senderId` вторым аргументом от сервера Foundry.
+        Это дружеский модуль для доверенного стола: приоритет — надёжность рантайма, отсутствие гонок и рассинхрона,
+        чистое снятие слушателей/таймеров/`requestAnimationFrame`, null-safety и корректность API Foundry v13, а не защита от злонамеренных игроков.
+    - path: "scripts/games/**/*.js"
+      instructions: |
+        Генерация паттернов и таймингов должна быть на 100% детерминированной от `session.seed` через `mulberry32`
+        (запрещён `Math.random()` в игровой логике и генерации, чтобы клиент игрока и наблюдатели видели одинаковую арену).
+        Массив `this.cues` должен оставаться отсортированным по `time`. Проверяй проходимость и честность на всех 4 сложностях
+        (`easy`, `medium`, `hard`, `insane`), отсутствие `NaN`/деления на ноль, а также корректную обработку ранней победы, поражения и таймаута.
+    - path: "styles/**/*.css"
+      instructions: |
+        Полная изоляция стилей от тем Foundry VTT v13 (Light / Dark / кастомные темы): использование `!important`
+        внутри `#ct-launcher.ct-launcher` и `.ct-chat-card` намеренно, чтобы переопределить переменные и слои темы Foundry.
+        Проверяй адаптивность сетки для 1 и 2 арен (`1280x720`–`1920x1080` и мобильные экраны) и поддержку `prefers-reduced-motion`.
+    - path: "lang/**/*.json"
+      instructions: |
+        Проверяй валидность JSON и 100% паритет ключей и плейсхолдеров `{...}` между `lang/ru.json` и `lang/en.json`.
+    - path: "tools/**/*.py"
+      instructions: |
+        Офлайн-скрипт на стандартной библиотеке Python для генерации `.wav`-файлов; в рантайме Foundry не используется.
+        Проверяй только математику, отсутствие клиппинга и выходных ошибок при генерации.
+
+knowledge_base:
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - "ARCHITECTURE.md"
