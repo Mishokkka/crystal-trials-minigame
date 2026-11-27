@@ -353,10 +353,10 @@ function receiveState(round, data, senderId) {
     || !Number.isInteger(lives) || !isBetween(lives, 0, round.session.lives)
     || !Number.isInteger(progress) || !isBetween(progress, 0, maxProgress)
     || typeof activeStarted !== "boolean" || !isBetween(invulnerableUntil, 0, round.session.durationSec + 0.75)
-    || (event !== undefined && !STATE_EVENTS.includes(event))) return;
+    || (event != null && !STATE_EVENTS.includes(event))) return;
   if (gameType === "maze" && typeof tracking !== "boolean") return;
 
-  slot.snapshot = {seq, t: simTime, x, y, vx, vy, moving, lives, progress, activeStarted, invulnerableUntil, tracking, event};
+  slot.snapshot = {seq, t: simTime, x, y, vx, vy, moving, lives, progress, activeStarted, invulnerableUntil, tracking, event: event ?? undefined};
   round.overlay.receiveState(userId, slot.snapshot);
 }
 

@@ -15,6 +15,9 @@ const BLOCKED = new Set([
 ]);
 const STEP = 1 / 120;
 const SEND_INTERVAL = 50;
+const BG_TICK_MS = 80;
+const RAF_STALL_MS = 120;
+const STALL_THRESHOLD_SEC = 0.12;
 const MAX_SNAPSHOTS = 16;
 const TRAIL_LENGTH = 20;
 export const CLOSE_MS = 240;
@@ -51,6 +54,8 @@ export class TrialOverlay {
     this.finished = false;
     this.closed = false;
     this.pausedCanvasTicker = false;
+    this.lastRaf = 0;
+    this.bgTimer = null;
     this.goUntil = -Infinity;
     this.clockTenth = null;
     this.clockLow = null;
@@ -69,6 +74,7 @@ export class TrialOverlay {
         game: null,
         view: null,
         snapshots: [],
+        lastSnapshotAt: 0,
         renderTime: 0,
         localTrail: [],
         particles: [],
@@ -205,6 +211,7 @@ export class TrialOverlay {
     if (!setting("muteLocal")) void this.sound.preload();
     this.sound.play("Open");
     this.frame(performance.now());
+    this.bgTimer = setInterval(() => this.backgroundTick(), BG_TICK_MS);
   }
 
   getCanvasRect(slot, refresh = false) {
@@ -554,17 +561,19 @@ export class TrialOverlay {
     if (!slot.active || (!event && now - slot.lastSend < SEND_INTERVAL)) return;
     slot.lastSend = now;
     const {x, y, vx, vy, moving, lives, progress, activeStarted, invulnerableUntil, tracking} = slot.game.state;
-    this.publishState(slot.userId, {
+    const payload = {
       seq: ++slot.sequence,
-      t: this.time,
-      x, y, vx, vy, moving, lives, progress, activeStarted, invulnerableUntil, tracking,
-      event
-    });
+      t: clamp(this.simulated, 0, this.session.durationSec),
+      x, y, vx, vy, moving, lives, progress, activeStarted, invulnerableUntil, tracking
+    };
+    if (event !== undefined) payload.event = event;
+    this.publishState(slot.userId, payload);
   }
 
   receiveState(userId, state) {
     const slot = this.slotMap.get(userId);
     if (!slot || slot.active || slot.result || this.finished) return;
+    slot.lastSnapshotAt = performance.now();
     slot.snapshots.push({...state, reacted: false});
     if (slot.snapshots.length > MAX_SNAPSHOTS) slot.snapshots.shift();
   }
@@ -582,13 +591,19 @@ export class TrialOverlay {
     }
 
     const latest = slot.snapshots.at(-1);
-    const targetTime = Math.max(0, latest.t - 0.08);
     if (!slot.result) {
+      const staleSec = Math.max(0, (performance.now() - slot.lastSnapshotAt) / 1000);
+      const stalled = staleSec > STALL_THRESHOLD_SEC;
+      const liveTarget = Math.max(0, latest.t - 0.08);
+      const maxClock = Math.min(this.session.durationSec, Math.max(this.time, latest.t));
+      const targetTime = stalled
+        ? clamp(Math.max(liveTarget, latest.t + staleSec - 0.08), 0, maxClock)
+        : liveTarget;
       slot.renderTime += dt;
       const drift = targetTime - slot.renderTime;
       if (Math.abs(drift) > 0.25) slot.renderTime = targetTime;
       else slot.renderTime += drift * clamp(dt * 8, 0, 1);
-      slot.renderTime = clamp(slot.renderTime, 0, latest.t);
+      slot.renderTime = clamp(slot.renderTime, 0, stalled ? maxClock : latest.t);
     } else {
       slot.renderTime = latest.t;
     }
@@ -671,10 +686,28 @@ export class TrialOverlay {
     slot.particles = alive;
   }
 
+  backgroundTick() {
+    if (this.closed) return;
+    const now = performance.now();
+    if (now - this.lastRaf < RAF_STALL_MS) return;
+    const dt = clamp((now - (this.lastFrame ?? now)) / 1000, 0, 0.25);
+    this.lastFrame = now;
+    if (!this.finished) {
+      this.advance(this.getNow());
+      if (!this.closed && this.activeSlot && !this.activeSlot.result && this.started) {
+        this.sendState(this.activeSlot);
+      }
+    }
+    if (!this.closed && !document.hidden) {
+      this.paint(now, dt);
+    }
+  }
+
   frame = now => {
     if (this.closed) return;
     const dt = clamp((now - (this.lastFrame ?? now)) / 1000, 0, 0.10);
     this.lastFrame = now;
+    this.lastRaf = performance.now();
     if (!this.finished) {
       this.advance(this.getNow());
       if (this.activeSlot && !this.activeSlot.result && this.started) {
@@ -874,6 +907,8 @@ export class TrialOverlay {
     this.listeners.abort();
     this.keys.clear();
     cancelAnimationFrame(this.frameId);
+    clearInterval(this.bgTimer);
+    this.bgTimer = null;
     clearTimeout(this.holdId);
     clearTimeout(this.closeId);
     this.sound.close();
