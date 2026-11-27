@@ -51,6 +51,8 @@ export class TrialOverlay {
     this.finished = false;
     this.closed = false;
     this.goUntil = -Infinity;
+    this.clockTenth = null;
+    this.clockLow = null;
 
     this.slots = session.targets.map((target, index) => {
       const slot = {
@@ -70,7 +72,11 @@ export class TrialOverlay {
         result: null,
         displayedLives: session.lives,
         sequence: 0,
-        lastSend: -Infinity
+        lastSend: -Infinity,
+        canvasRect: null,
+        lastTimeScale: null,
+        timeLow: null,
+        statusKey: null
       };
       slot.game = new GAMES[session.gameType].Game(session, event => this.handleSlotEvent(slot, event));
       slot.view = {...slot.game.state};
@@ -86,7 +92,7 @@ export class TrialOverlay {
     const {gameType, customTitle, lives, difficulty} = this.session;
     const modeName = t(`Games.${gameType}.Name`);
     const duo = this.slots.length > 1;
-    const scale = Math.min(window.devicePixelRatio || 1, 2);
+    const scale = Math.min(window.devicePixelRatio || 1, 1.5);
 
     this.root = element("dialog", `ct-dialog ct-diff-${difficulty}`);
     const title = element("h2", "ct-title", customTitle || modeName);
@@ -143,12 +149,14 @@ export class TrialOverlay {
       canvas.setAttribute("aria-label", `${modeName} — ${slot.name}`);
       canvas.width = Math.round(WIDTH * scale);
       canvas.height = Math.round(HEIGHT * scale);
-      const ctx = canvas.getContext("2d");
+      const ctx = canvas.getContext("2d", {alpha: false}) || canvas.getContext("2d");
       ctx.scale(canvas.width / WIDTH, canvas.height / HEIGHT);
       const backdrop = element("canvas");
-      backdrop.width = WIDTH;
-      backdrop.height = HEIGHT;
-      arenaBackground(backdrop.getContext("2d"));
+      backdrop.width = canvas.width;
+      backdrop.height = canvas.height;
+      const bctx = backdrop.getContext("2d", {alpha: false}) || backdrop.getContext("2d");
+      bctx.scale(canvas.width / WIDTH, canvas.height / HEIGHT);
+      arenaBackground(bctx);
 
       const banner = element("div", "ct-banner");
       banner.setAttribute("aria-live", "polite");
@@ -185,8 +193,19 @@ export class TrialOverlay {
     document.body.append(this.root);
     this.root.showModal();
     panel.focus({preventScroll: true});
+    void this.sound.preload();
     this.sound.play("Open");
     this.frame(performance.now());
+  }
+
+  getCanvasRect(slot, refresh = false) {
+    if (!refresh && slot.canvasRect?.width && slot.canvasRect?.height) return slot.canvasRect;
+    const rect = slot.canvas.getBoundingClientRect?.();
+    if (rect?.width && rect?.height) {
+      slot.canvasRect = rect;
+      return rect;
+    }
+    return null;
   }
 
   updateMuteButton() {
@@ -243,12 +262,19 @@ export class TrialOverlay {
     for (const type of ["pointermove", "mousemove", "wheel"]) {
       this.root.addEventListener(type, event => event.stopPropagation(), {signal});
     }
+    window.addEventListener("resize", () => {
+      for (const slot of this.slots) slot.canvasRect = null;
+    }, {signal});
 
     const active = this.activeSlot;
     if (!active) return;
     if (this.session.gameType === "maze") {
+      active.canvas.addEventListener("pointerenter", () => this.getCanvasRect(active, true), {signal});
       active.canvas.addEventListener("pointermove", event => this.updatePointer(event), {signal});
-      active.canvas.addEventListener("pointerdown", event => this.updatePointer(event), {signal});
+      active.canvas.addEventListener("pointerdown", event => {
+        this.getCanvasRect(active, true);
+        this.updatePointer(event);
+      }, {signal});
       active.canvas.addEventListener("pointerleave", () => this.leavePointer(), {signal});
       active.canvas.addEventListener("pointercancel", () => this.leavePointer(), {signal});
     } else if (this.session.gameType === "timing") {
@@ -258,14 +284,15 @@ export class TrialOverlay {
         this.press("timing");
       }, {signal});
     } else if (this.session.gameType === "aim") {
-      const toPoint = event => {
-        const rect = active.canvas.getBoundingClientRect();
-        if (!rect.width || !rect.height) return null;
+      const toPoint = (event, refresh = false) => {
+        const rect = this.getCanvasRect(active, refresh);
+        if (!rect) return null;
         return {
           x: clamp((event.clientX - rect.left) * WIDTH / rect.width, 0, WIDTH),
           y: clamp((event.clientY - rect.top) * HEIGHT / rect.height, 0, HEIGHT)
         };
       };
+      active.canvas.addEventListener("pointerenter", () => this.getCanvasRect(active, true), {signal});
       active.canvas.addEventListener("pointermove", event => {
         if (!event.isPrimary || this.finished || active.result) return;
         const pt = toPoint(event);
@@ -273,7 +300,7 @@ export class TrialOverlay {
       }, {signal});
       active.canvas.addEventListener("pointerdown", event => {
         if (event.button !== 0 || !event.isPrimary || this.finished || active.result) return;
-        const pt = toPoint(event);
+        const pt = toPoint(event, true);
         if (!pt) return;
         this.advance(this.getNow());
         if (this.started && !active.result && !this.finished) {
@@ -341,8 +368,8 @@ export class TrialOverlay {
   updatePointer(event) {
     const active = this.activeSlot;
     if (!active || active.result || this.finished || !event.isPrimary) return;
-    const rect = active.canvas.getBoundingClientRect();
-    if (!rect.width || !rect.height) return;
+    const rect = this.getCanvasRect(active);
+    if (!rect) return;
     const samples = event.getCoalescedEvents?.() ?? [];
     this.advance(this.getNow());
     for (const sample of samples.length ? samples : [event]) {
@@ -484,6 +511,9 @@ export class TrialOverlay {
         maxLife: 0.28 + Math.random() * 0.24
       });
     }
+    if (slot.particles.length > 60) {
+      slot.particles.splice(0, slot.particles.length - 60);
+    }
   }
 
   reactSlot(slot, event, pos) {
@@ -605,11 +635,11 @@ export class TrialOverlay {
   updateAndDrawParticles(slot, ctx, dt) {
     if (!slot.particles.length) return;
     const alive = [];
+    ctx.save();
     for (const p of slot.particles) {
       p.life += dt;
       if (p.life >= p.maxLife) continue;
       const alpha = 1 - p.life / p.maxLife;
-      ctx.save();
       ctx.globalAlpha = alpha;
       if (p.kind === "ring") {
         const radius = p.radius + (p.maxRadius - p.radius) * (1 - alpha);
@@ -626,9 +656,9 @@ export class TrialOverlay {
         p.angle += p.spin * dt;
         crystal(ctx, p.x, p.y, p.size, p.size * 1.4, p.color, p.angle);
       }
-      ctx.restore();
       alive.push(p);
     }
+    ctx.restore();
     slot.particles = alive;
   }
 
@@ -655,6 +685,8 @@ export class TrialOverlay {
 
       ctx.save();
       if (slot.shake > 0.2 && !this.reducedMotion) {
+        ctx.fillStyle = "#0b0912";
+        ctx.fillRect(0, 0, WIDTH, HEIGHT);
         const sx = (Math.random() * 2 - 1) * slot.shake;
         const sy = (Math.random() * 2 - 1) * slot.shake;
         ctx.translate(sx, sy);
@@ -677,8 +709,16 @@ export class TrialOverlay {
       ctx.restore();
 
       const remainingFrac = clamp(1 - drawTime / durationSec, 0, 1);
-      slot.timeFill.style.transform = `scaleX(${remainingFrac})`;
-      slot.timeFill.classList.toggle("ct-timebar-low", durationSec - drawTime <= 3);
+      const timeScale = remainingFrac.toFixed(3);
+      if (timeScale !== slot.lastTimeScale) {
+        slot.lastTimeScale = timeScale;
+        slot.timeFill.style.transform = `scaleX(${timeScale})`;
+      }
+      const timeLow = durationSec - drawTime <= 3;
+      if (timeLow !== slot.timeLow) {
+        slot.timeLow = timeLow;
+        slot.timeFill.classList.toggle("ct-timebar-low", timeLow);
+      }
 
       const lives = slot.result ? slot.result.livesLeft : slot.view.lives;
       if (lives !== slot.displayedLives) {
@@ -696,37 +736,57 @@ export class TrialOverlay {
         });
       }
 
-      let status = t(`Games.${gameType}.Help`);
+      let statusKey = gameType;
       if (gameType === "maze") {
-        if (!slot.view.activeStarted) status = t(slot.active ? "Overlay.GrabStart" : "Overlay.WatchingStart");
-        else if (!slot.view.tracking) status = t(slot.active ? "Overlay.Regrab" : "Overlay.WatchingRegrab");
-        else if (difficulty === "hard" || difficulty === "insane") status = t("Overlay.MazeGates");
-      } else if (gameType === "timing") {
-        status = t("Overlay.TimingProgress", {
-          hits: slot.view.progress, total: slot.game.totalZones, required: slot.game.rules.required
-        });
-      } else if (gameType === "aim") {
-        status = t("Overlay.AimProgress", {
-          hits: slot.view.progress, total: slot.game.rules.count, required: slot.game.rules.required
-        });
-      } else if (gameType === "sigil") {
-        status = t("Overlay.SigilProgress", {
-          hits: slot.view.progress, total: slot.game.rules.length
-        });
-      } else if (gameType === "shield") {
-        status = t("Overlay.ShieldProgress", {hits: slot.view.progress});
-      } else if (gameType === "resonance" && (difficulty === "hard" || difficulty === "insane")) {
-        status = t("Overlay.ResonanceHard");
+        statusKey = !slot.view.activeStarted ? `maze:0:${slot.active}` : !slot.view.tracking ? `maze:1:${slot.active}` : `maze:2:${difficulty}`;
+      } else if (gameType === "timing" || gameType === "aim" || gameType === "sigil" || gameType === "shield") {
+        statusKey = `${gameType}:${slot.view.progress}`;
+      } else if (gameType === "resonance") {
+        statusKey = `resonance:${difficulty}`;
       }
-      if (slot.status.textContent !== status) slot.status.textContent = status;
+      if (statusKey !== slot.statusKey) {
+        slot.statusKey = statusKey;
+        let status = t(`Games.${gameType}.Help`);
+        if (gameType === "maze") {
+          if (!slot.view.activeStarted) status = t(slot.active ? "Overlay.GrabStart" : "Overlay.WatchingStart");
+          else if (!slot.view.tracking) status = t(slot.active ? "Overlay.Regrab" : "Overlay.WatchingRegrab");
+          else if (difficulty === "hard" || difficulty === "insane") status = t("Overlay.MazeGates");
+        } else if (gameType === "timing") {
+          status = t("Overlay.TimingProgress", {
+            hits: slot.view.progress, total: slot.game.totalZones, required: slot.game.rules.required
+          });
+        } else if (gameType === "aim") {
+          status = t("Overlay.AimProgress", {
+            hits: slot.view.progress, total: slot.game.rules.count, required: slot.game.rules.required
+          });
+        } else if (gameType === "sigil") {
+          status = t("Overlay.SigilProgress", {
+            hits: slot.view.progress, total: slot.game.rules.length
+          });
+        } else if (gameType === "shield") {
+          status = t("Overlay.ShieldProgress", {hits: slot.view.progress});
+        } else if (gameType === "resonance" && (difficulty === "hard" || difficulty === "insane")) {
+          status = t("Overlay.ResonanceHard");
+        }
+        if (slot.status.textContent !== status) slot.status.textContent = status;
+      }
     }
 
     const displayTime = final && this.slots.every(s => s.result)
       ? Math.max(...this.slots.map(s => s.result.elapsedSec))
       : this.time;
-    const clock = t("Overlay.Timer", {seconds: this.number.format(Math.max(0, durationSec - displayTime))});
-    if (this.clock.textContent !== clock) this.clock.textContent = clock;
-    this.clock.classList.toggle("ct-clock-low", durationSec - displayTime <= 3);
+    const remainingSec = Math.max(0, durationSec - displayTime);
+    const tenth = Math.round(remainingSec * 10);
+    if (tenth !== this.clockTenth) {
+      this.clockTenth = tenth;
+      const clock = t("Overlay.Timer", {seconds: this.number.format(tenth / 10)});
+      if (this.clock.textContent !== clock) this.clock.textContent = clock;
+    }
+    const clockLow = remainingSec <= 3;
+    if (clockLow !== this.clockLow) {
+      this.clockLow = clockLow;
+      this.clock.classList.toggle("ct-clock-low", clockLow);
+    }
   }
 
   showSlotResult(userId, result) {

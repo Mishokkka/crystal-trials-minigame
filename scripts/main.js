@@ -3,7 +3,7 @@ import {DIFFICULTIES, GAMES} from "./games/index.js";
 import {GmLauncher} from "./gm-launcher.js";
 import {TrialOverlay} from "./overlay.js";
 import {MODULE_ID, SOCKET, element, serverTime, setting, t} from "./shared.js";
-import {registerSoundSettings} from "./sound-manager.js";
+import {preloadSounds, registerSoundSettings} from "./sound-manager.js";
 
 const START_LEAD_MS = 180;
 const WATCHDOG_GRACE_MS = 2500;
@@ -428,6 +428,7 @@ Hooks.on("getSceneControlButtons", controls => {
 
 Hooks.once("ready", () => {
   ready = true;
+  void preloadSounds();
   game.socket.on(SOCKET, receive);
   game.socket.on("disconnect", () => current?.overlay.close());
   Hooks.on("controlToken", () => launcher?.refreshPlayers(true));

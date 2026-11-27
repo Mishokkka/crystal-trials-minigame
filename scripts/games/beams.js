@@ -1,4 +1,4 @@
-import {ArenaGame, HEIGHT, PALETTE, SOUL_RADIUS, WIDTH, clamp, crystal, drawSoul} from "./base.js";
+import {ArenaGame, HEIGHT, PALETTE, SOUL_RADIUS, WIDTH, clamp, crystal, drawGlow, drawSoul} from "./base.js";
 
 const LEVELS = {
   easy: {warning: [0.95, 0.95], fireDur: [0.36, 0.36], step: [1.30, 1.48], minSafeFrac: 0.42, moveSpeed: 218, spinChance: 0},
@@ -265,25 +265,31 @@ export class BeamsGame extends ArenaGame {
           ctx.stroke();
         }
       } else {
-        ctx.shadowColor = fireGlow;
-        ctx.shadowBlur = 20;
-        ctx.strokeStyle = fireFill;
-        ctx.lineWidth = attack.width;
         ctx.lineCap = "butt";
         ctx.beginPath();
         ctx.moveTo(p1.x - dx * 20, p1.y - dy * 20);
         ctx.lineTo(p2.x + dx * 20, p2.y + dy * 20);
+
+        ctx.strokeStyle = fireGlow;
+        ctx.globalAlpha = 0.22;
+        ctx.lineWidth = attack.width + 16;
+        ctx.stroke();
+
+        ctx.strokeStyle = fireFill;
+        ctx.globalAlpha = 0.85;
+        ctx.lineWidth = attack.width;
         ctx.stroke();
 
         ctx.strokeStyle = "#fff4ff";
+        ctx.globalAlpha = 1;
         ctx.lineWidth = 5;
-        ctx.beginPath();
-        ctx.moveTo(p1.x - dx * 20, p1.y - dy * 20);
-        ctx.lineTo(p2.x + dx * 20, p2.y + dy * 20);
         ctx.stroke();
       }
 
       const emitterColor = aiming ? (attack.spin !== 0 ? PALETTE.crimson : PALETTE.gold) : fireGlow;
+      ctx.globalAlpha = 1;
+      drawGlow(ctx, p1.x, p1.y, 16, emitterColor, 0.35);
+      drawGlow(ctx, p2.x, p2.y, 16, emitterColor, 0.35);
       crystal(ctx, p1.x, p1.y, 8, 11, emitterColor, angle + Math.PI / 2);
       crystal(ctx, p2.x, p2.y, 8, 11, emitterColor, angle + Math.PI / 2);
       ctx.restore();

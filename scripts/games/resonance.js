@@ -120,34 +120,38 @@ export class ResonanceGame extends ArenaGame {
       const warning = time < wave.start;
 
       ctx.save();
-      ctx.shadowColor = color;
-      ctx.shadowBlur = 15;
 
       if (wave.kind === "ring") {
         if (warning) {
+          const pulseAlpha = 0.55 + 0.4 * Math.sin(time * 18) ** 2;
           ctx.strokeStyle = color;
-          ctx.lineWidth = 4;
-          ctx.globalAlpha = 0.55 + 0.4 * Math.sin(time * 18) ** 2;
-          ctx.setLineDash([7, 5]);
           ctx.beginPath();
           ctx.arc(WIDTH / 2, HEIGHT / 2, 22, 0, Math.PI * 2);
+          ctx.lineWidth = 10;
+          ctx.globalAlpha = pulseAlpha * 0.22;
+          ctx.stroke();
+          ctx.lineWidth = 4;
+          ctx.globalAlpha = pulseAlpha;
+          ctx.setLineDash([7, 5]);
           ctx.stroke();
         } else {
           const r = this.position(wave, time);
           if (r > 0) {
             ctx.strokeStyle = color;
-            ctx.lineWidth = wave.width;
-            ctx.globalAlpha = 0.36;
             ctx.beginPath();
             ctx.arc(WIDTH / 2, HEIGHT / 2, r, 0, Math.PI * 2);
+            ctx.lineWidth = wave.width + 14;
+            ctx.globalAlpha = 0.14;
+            ctx.stroke();
+
+            ctx.lineWidth = wave.width;
+            ctx.globalAlpha = 0.38;
             ctx.stroke();
 
             ctx.globalAlpha = 0.9;
             ctx.strokeStyle = "#ffffffaa";
             ctx.lineWidth = 2;
             if (!wave.amber) ctx.setLineDash([6, 8]);
-            ctx.beginPath();
-            ctx.arc(WIDTH / 2, HEIGHT / 2, r, 0, Math.PI * 2);
             ctx.stroke();
           }
         }
@@ -157,8 +161,13 @@ export class ResonanceGame extends ArenaGame {
 
       const center = warning ? (wave.direction === 1 ? 6 : wave.axis - 6) : this.position(wave, time);
       const thickness = warning ? 8 : wave.width;
+      const baseAlpha = warning ? 0.5 + 0.4 * Math.sin(time * 16) ** 2 : 0.42;
       ctx.fillStyle = color;
-      ctx.globalAlpha = warning ? 0.5 + 0.4 * Math.sin(time * 16) ** 2 : 0.42;
+      ctx.globalAlpha = warning ? baseAlpha * 0.25 : 0.14;
+      if (wave.vertical) ctx.fillRect(center - (thickness + 14) / 2, 0, thickness + 14, HEIGHT);
+      else ctx.fillRect(0, center - (thickness + 14) / 2, WIDTH, thickness + 14);
+
+      ctx.globalAlpha = baseAlpha;
       if (wave.vertical) ctx.fillRect(center - thickness / 2, 0, thickness, HEIGHT);
       else ctx.fillRect(0, center - thickness / 2, WIDTH, thickness);
 

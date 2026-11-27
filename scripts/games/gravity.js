@@ -349,20 +349,22 @@ export class GravityGame extends ArenaGame {
 
   draw(ctx, time, state, labels) {
     const {dir} = this.surfaceAt(time);
-    const floorGlow = ctx.createLinearGradient(0, FLOOR, 0, HEIGHT);
-    floorGlow.addColorStop(0, dir === 1 ? "#8a3cd14f" : "#3b1d5a22");
-    floorGlow.addColorStop(1, "#100b1d");
-    ctx.fillStyle = floorGlow;
+    ctx.fillStyle = "#100b1d";
     ctx.fillRect(0, FLOOR, WIDTH, HEIGHT - FLOOR);
+    ctx.fillStyle = dir === 1 ? "#8a3cd13d" : "#3b1d5a1c";
+    ctx.fillRect(0, FLOOR, WIDTH, 18);
+    ctx.fillStyle = dir === 1 ? "#8a3cd11f" : "#3b1d5a0e";
+    ctx.fillRect(0, FLOOR + 18, WIDTH, 14);
     ctx.fillStyle = dir === 1 ? PALETTE.lilac : "#7c52a8";
     ctx.fillRect(0, FLOOR, WIDTH, 2);
 
     if (this.flips.length) {
-      const ceilGlow = ctx.createLinearGradient(0, 0, 0, CEILING);
-      ceilGlow.addColorStop(0, "#100b1d");
-      ceilGlow.addColorStop(1, dir === -1 ? "#e879f94f" : "#3b1d5a22");
-      ctx.fillStyle = ceilGlow;
+      ctx.fillStyle = "#100b1d";
       ctx.fillRect(0, 0, WIDTH, CEILING);
+      ctx.fillStyle = dir === -1 ? "#e879f93d" : "#3b1d5a1c";
+      ctx.fillRect(0, CEILING - 18, WIDTH, 18);
+      ctx.fillStyle = dir === -1 ? "#e879f91f" : "#3b1d5a0e";
+      ctx.fillRect(0, CEILING - 32, WIDTH, 14);
       ctx.fillStyle = dir === -1 ? PALETTE.pink : "#7c52a8";
       ctx.fillRect(0, CEILING - 2, WIDTH, 2);
     }
@@ -427,9 +429,11 @@ export class GravityGame extends ArenaGame {
           if (px > -row.platW && px < WIDTH) {
             const py = rSurf - row.surfDir * PLAT_OFFSET;
             ctx.save();
+            ctx.fillStyle = PALETTE.mint;
+            ctx.globalAlpha = 0.24;
+            ctx.fillRect(px - 3, py - 6, row.platW + 6, 12);
+            ctx.globalAlpha = 1;
             ctx.fillStyle = "#8ff3cbcc";
-            ctx.shadowColor = PALETTE.mint;
-            ctx.shadowBlur = 10;
             ctx.fillRect(px, py - 3, row.platW, 6);
             ctx.restore();
           }

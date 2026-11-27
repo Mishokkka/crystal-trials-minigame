@@ -27,7 +27,68 @@ export function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
+const GLOW_SPRITES = new Map();
+
+function getGlowSprite(color) {
+  if (typeof document === "undefined") return null;
+  let sprite = GLOW_SPRITES.get(color);
+  if (sprite) return sprite;
+  if (GLOW_SPRITES.size >= 32) {
+    const oldest = GLOW_SPRITES.keys().next().value;
+    if (oldest !== undefined) GLOW_SPRITES.delete(oldest);
+  }
+  const size = 64;
+  const half = size / 2;
+  sprite = document.createElement("canvas");
+  sprite.width = size;
+  sprite.height = size;
+  const sctx = sprite.getContext("2d");
+  const grad = sctx.createRadialGradient(half, half, 0, half, half, half);
+  grad.addColorStop(0, color);
+  grad.addColorStop(0.45, color.length === 7 ? `${color}55` : color);
+  grad.addColorStop(1, "transparent");
+  sctx.fillStyle = grad;
+  sctx.fillRect(0, 0, size, size);
+  GLOW_SPRITES.set(color, sprite);
+  return sprite;
+}
+
+export function drawGlow(ctx, x, y, radius, color, alpha = 0.45) {
+  const prevAlpha = ctx.globalAlpha;
+  const sprite = getGlowSprite(color);
+  if (sprite) {
+    ctx.globalAlpha = prevAlpha * alpha;
+    ctx.drawImage(sprite, x - radius, y - radius, radius * 2, radius * 2);
+    ctx.globalAlpha = prevAlpha;
+    return;
+  }
+  ctx.globalAlpha = prevAlpha * alpha * 0.45;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(x, y, radius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = prevAlpha;
+}
+
 export function crystal(ctx, x, y, rx, ry, color, angle = 0) {
+  if (!angle) {
+    ctx.beginPath();
+    ctx.moveTo(x, y - ry);
+    ctx.lineTo(x + rx, y);
+    ctx.lineTo(x, y + ry);
+    ctx.lineTo(x - rx, y);
+    ctx.closePath();
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(x, y - ry);
+    ctx.lineTo(x, y + ry);
+    ctx.lineTo(x - rx, y);
+    ctx.closePath();
+    ctx.fillStyle = "#ffffff55";
+    ctx.fill();
+    return;
+  }
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(angle);
@@ -51,13 +112,9 @@ export function crystal(ctx, x, y, rx, ry, color, angle = 0) {
 
 export function drawSoul(ctx, state, time, color = "#f2ceff") {
   if (time < state.invulnerableUntil && Math.floor(time * 18) % 2) return;
-  ctx.save();
-  ctx.shadowBlur = 16;
-  ctx.shadowColor = PALETTE.pink;
+  drawGlow(ctx, state.x, state.y, 20, PALETTE.pink, 0.50);
   crystal(ctx, state.x, state.y, 9, 11, color);
-  ctx.shadowBlur = 0;
   crystal(ctx, state.x, state.y, 3, 4, "#fff9ff");
-  ctx.restore();
 }
 
 export function arenaBackground(ctx) {

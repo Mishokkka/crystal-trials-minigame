@@ -1,4 +1,4 @@
-import {ArenaGame, HEIGHT, PALETTE, WIDTH, clamp, crystal} from "./base.js";
+import {ArenaGame, HEIGHT, PALETTE, WIDTH, clamp, crystal, drawGlow} from "./base.js";
 
 export const AIM_RULES = {
   easy: {count: 6, required: 5, radius: 28, lifetime: 1.55, decoyCount: 0},
@@ -161,15 +161,13 @@ export class AimGame extends ArenaGame {
         ctx.stroke();
 
         ctx.globalAlpha = 1;
+        drawGlow(ctx, t.x, t.y, r * 1.65, PALETTE.gold, 0.42);
         ctx.fillStyle = "#3b1d5fcc";
         ctx.strokeStyle = "#fde68a";
-        ctx.shadowColor = PALETTE.gold;
-        ctx.shadowBlur = 12;
         ctx.beginPath();
         ctx.arc(t.x, t.y, r, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
-        ctx.shadowBlur = 0;
         crystal(ctx, t.x, t.y, r * 0.38, r * 0.50, PALETTE.gold);
       }
       ctx.restore();

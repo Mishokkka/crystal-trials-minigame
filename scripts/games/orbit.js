@@ -136,21 +136,20 @@ export class OrbitGame extends ArenaGame {
       const endA = gap - ring.gapWidth / 2 + Math.PI * 2;
       const color = ring.outward ? PALETTE.gold : (this.insane ? PALETTE.insane : PALETTE.pink);
 
-      ctx.globalAlpha = 0.9;
-      ctx.strokeStyle = color;
-      ctx.shadowColor = color;
-      ctx.shadowBlur = 12;
-      ctx.lineWidth = 8;
       ctx.lineCap = "round";
       ctx.beginPath();
       ctx.arc(CX, CY, r, startA, endA);
+      ctx.strokeStyle = color;
+      ctx.globalAlpha = 0.22;
+      ctx.lineWidth = 14;
       ctx.stroke();
 
-      ctx.shadowBlur = 0;
+      ctx.globalAlpha = 0.92;
+      ctx.lineWidth = 8;
+      ctx.stroke();
+
       ctx.strokeStyle = "#fff5ff99";
       ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(CX, CY, r, startA, endA);
       ctx.stroke();
     }
     ctx.restore();

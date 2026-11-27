@@ -1,4 +1,4 @@
-import {ArenaGame, HEIGHT, PALETTE, WIDTH, clamp, crystal} from "./base.js";
+import {ArenaGame, HEIGHT, PALETTE, WIDTH, clamp, crystal, drawGlow} from "./base.js";
 
 const BAR = {x: 48, y: 164, width: 384, height: 34};
 export const TIMING_RULES = {
@@ -185,18 +185,19 @@ export class TimingGame extends ArenaGame {
     for (const z of zones) {
       const done = this.attempts.has(z.id);
       const zoneX = z.center - z.width / 2;
+      const bandW = z.width * 0.68;
       ctx.save();
       if (done) ctx.globalAlpha = 0.28;
-      const gradient = ctx.createLinearGradient(zoneX, 0, zoneX + z.width, 0);
-      gradient.addColorStop(0, "#7548ad");
-      gradient.addColorStop(0.5, "#fcd57c");
-      gradient.addColorStop(1, "#7548ad");
-      ctx.fillStyle = gradient;
+      ctx.fillStyle = "#7548ad";
       ctx.fillRect(zoneX, BAR.y - 3, z.width, BAR.height + 6);
+      ctx.fillStyle = "#d4a26a";
+      ctx.fillRect(z.center - bandW / 2, BAR.y - 3, bandW, BAR.height + 6);
+      ctx.fillStyle = "#fcd57c";
+      ctx.fillRect(z.center - z.coreWidth / 2, BAR.y - 3, z.coreWidth, BAR.height + 6);
+      ctx.fillStyle = "#fff8dc99";
+      ctx.fillRect(z.center - z.coreWidth * 0.35, BAR.y - 3, z.coreWidth * 0.7, BAR.height + 6);
       ctx.strokeStyle = "#efc77f";
       ctx.strokeRect(zoneX, BAR.y - 3, z.width, BAR.height + 6);
-      ctx.fillStyle = "#fff8dc99";
-      ctx.fillRect(z.center - z.coreWidth / 2, BAR.y - 3, z.coreWidth, BAR.height + 6);
       ctx.restore();
       if (!done && live && Math.abs(x - z.center) <= z.width / 2) anyInZone = true;
     }
@@ -243,14 +244,16 @@ export class TimingGame extends ArenaGame {
     }
 
     // Moving marker + direction arrow
-    ctx.globalAlpha = live ? 1 : 0.45;
-    if (time < state.invulnerableUntil && Math.floor(time * 18) % 2) ctx.globalAlpha *= 0.35;
+    const glowColor = this.insane ? PALETTE.insane : PALETTE.pink;
+    const markerAlpha = (live ? 1 : 0.45) * (time < state.invulnerableUntil && Math.floor(time * 18) % 2 ? 0.35 : 1);
+    ctx.fillStyle = glowColor;
+    ctx.globalAlpha = markerAlpha * 0.24;
+    ctx.fillRect(x - 5.5, BAR.y - 14, 11, BAR.height + 28);
     ctx.fillStyle = "#fff9fc";
-    ctx.shadowColor = this.insane ? PALETTE.insane : PALETTE.pink;
-    ctx.shadowBlur = 18;
+    ctx.globalAlpha = markerAlpha;
     ctx.fillRect(x - 1.5, BAR.y - 14, 3, BAR.height + 28);
+    drawGlow(ctx, x, BAR.y + BAR.height / 2, 16, glowColor, 0.42);
     crystal(ctx, x, BAR.y + BAR.height / 2, 6, 9, anyInZone ? "#fff9d2" : "#fff7ff");
-    ctx.shadowBlur = 0;
 
     if (!live) {
       const arrowX = forward ? BAR.x + 14 : BAR.x + BAR.width - 14;

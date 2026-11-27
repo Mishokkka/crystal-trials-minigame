@@ -139,12 +139,14 @@ export class ShieldGame extends ArenaGame {
 
     // Active energy shield arc
     ctx.strokeStyle = PALETTE.cyan;
-    ctx.shadowColor = PALETTE.cyan;
-    ctx.shadowBlur = 14;
-    ctx.lineWidth = 5;
     ctx.lineCap = "round";
     ctx.beginPath();
     ctx.arc(CX, CY, 30, shieldAngle - 0.72, shieldAngle + 0.72);
+    ctx.globalAlpha = 0.22;
+    ctx.lineWidth = 13;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.lineWidth = 5;
     ctx.stroke();
 
     ctx.strokeStyle = "#ffffffcc";

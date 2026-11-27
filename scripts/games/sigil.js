@@ -101,10 +101,12 @@ export class SigilGame extends ArenaGame {
 
       ctx.save();
       if (active) {
-        ctx.shadowColor = rune.inverted ? PALETTE.crimson : PALETTE.gold;
-        ctx.shadowBlur = 16;
         const pulse = 3 + Math.sin(time * 12) * 1.5;
         ctx.strokeStyle = rune.inverted ? PALETTE.crimson : PALETTE.gold;
+        ctx.globalAlpha = 0.22;
+        ctx.lineWidth = 7;
+        ctx.strokeRect(rune.tx - half - pulse, rune.ty - half - pulse, rune.size + pulse * 2, rune.size + pulse * 2);
+        ctx.globalAlpha = 1;
         ctx.lineWidth = 2;
         ctx.strokeRect(rune.tx - half - pulse, rune.ty - half - pulse, rune.size + pulse * 2, rune.size + pulse * 2);
       }

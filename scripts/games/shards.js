@@ -177,13 +177,13 @@ export class ShardsGame extends ArenaGame {
   }
 
   draw(ctx, time, state) {
+    ctx.save();
     for (const shard of this.shards) {
       if (time < shard.cue || time >= shard.end) continue;
       if (time < shard.spawn) {
         const progress = clamp((time - shard.cue) / (shard.spawn - shard.cue), 0, 1);
         const ix = clamp(shard.entryX, 5, WIDTH - 5);
         const iy = clamp(shard.entryY, 5, HEIGHT - 5);
-        ctx.save();
         ctx.globalAlpha = 0.25 + 0.65 * progress;
         ctx.strokeStyle = shard.color;
         ctx.lineWidth = 1.5;
@@ -194,7 +194,6 @@ export class ShardsGame extends ArenaGame {
         ctx.stroke();
         ctx.setLineDash([]);
         crystal(ctx, ix, iy, 4 + progress * 2, 4 + progress * 2, shard.color, shard.angle);
-        ctx.restore();
         continue;
       }
       const elapsed = time - shard.spawn;
@@ -203,20 +202,26 @@ export class ShardsGame extends ArenaGame {
       const tailLen = Math.min(36, shard.speed * 0.085);
       const tx = px - shard.ux * tailLen;
       const ty = py - shard.uy * tailLen;
-      ctx.save();
-      const grad = ctx.createLinearGradient(tx, ty, px, py);
-      grad.addColorStop(0, "transparent");
-      grad.addColorStop(1, `${shard.color}88`);
-      ctx.strokeStyle = grad;
-      ctx.lineWidth = shard.radius * 0.85;
+      const mx = (tx + px) * 0.5;
+      const my = (ty + py) * 0.5;
+      ctx.strokeStyle = shard.color;
       ctx.lineCap = "round";
+      ctx.lineWidth = shard.radius * 0.65;
+      ctx.globalAlpha = 0.20;
       ctx.beginPath();
       ctx.moveTo(tx, ty);
+      ctx.lineTo(mx, my);
+      ctx.stroke();
+      ctx.lineWidth = shard.radius * 0.90;
+      ctx.globalAlpha = 0.50;
+      ctx.beginPath();
+      ctx.moveTo(mx, my);
       ctx.lineTo(px, py);
       ctx.stroke();
-      ctx.restore();
+      ctx.globalAlpha = 1;
       crystal(ctx, px, py, shard.radius, shard.length, shard.color, shard.angle + Math.PI / 2);
     }
+    ctx.restore();
     drawSoul(ctx, state, time);
   }
 }
