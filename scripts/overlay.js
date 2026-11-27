@@ -53,6 +53,10 @@ export class TrialOverlay {
     this.goUntil = -Infinity;
     this.clockTenth = null;
     this.clockLow = null;
+    this.perfWindowStart = 0;
+    this.perfFrames = 0;
+    this.perfPaintSum = 0;
+    this.perfPaintMax = 0;
 
     this.slots = session.targets.map((target, index) => {
       const slot = {
@@ -672,7 +676,24 @@ export class TrialOverlay {
         this.sendState(this.activeSlot);
       }
     }
+    const p0 = performance.now();
     this.paint(now, dt);
+    const pMs = performance.now() - p0;
+    if (!this.perfWindowStart) this.perfWindowStart = now;
+    this.perfFrames++;
+    this.perfPaintSum += pMs;
+    if (pMs > this.perfPaintMax) this.perfPaintMax = pMs;
+    const elapsed = now - this.perfWindowStart;
+    if (elapsed >= 1000 && this.root?.dataset) {
+      const fps = Math.round((this.perfFrames * 1000) / elapsed);
+      const avg = (this.perfPaintSum / this.perfFrames).toFixed(2);
+      const max = this.perfPaintMax.toFixed(2);
+      this.root.dataset.ctPerf = `fps=${fps} avgPaint=${avg}ms maxPaint=${max}ms`;
+      this.perfWindowStart = now;
+      this.perfFrames = 0;
+      this.perfPaintSum = 0;
+      this.perfPaintMax = 0;
+    }
     this.frameId = requestAnimationFrame(this.frame);
   };
 

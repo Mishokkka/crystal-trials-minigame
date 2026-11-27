@@ -25,6 +25,7 @@ const DUPLICATE_COOLDOWN_MS = 28;
 
 const decodedBuffers = new Map();
 const loadingBuffers = new Map();
+const failedBuffers = new Set();
 
 export function registerSoundSettings(onChange) {
   game.settings.register(MODULE_ID, "masterVolume", {
@@ -40,7 +41,10 @@ export function registerSoundSettings(onChange) {
       name: `CrystalTrials.Sounds.${key}`, hint: "CrystalTrials.Settings.SoundHint",
       scope: "world", config: true, type: String, filePicker: "audio",
       default: file ? `modules/${MODULE_ID}/assets/sounds/${file}` : "",
-      onChange: key === "Bgm" ? onChange : () => { void preloadSounds(); }
+      onChange: key === "Bgm" ? onChange : () => {
+        failedBuffers.clear();
+        void preloadSounds();
+      }
     });
   }
 }
@@ -54,12 +58,30 @@ function clampVolume(value) {
 }
 
 function audioContext() {
-  const ctx = game.audio?.context;
+  const iface = game.audio?.interface;
+  const ctx = (iface && typeof iface.createBufferSource === "function") ? iface : game.audio?.context;
   return ctx && ctx.state !== "closed" ? ctx : null;
 }
 
+function resolveSrc(src) {
+  try {
+    return foundry?.utils?.getRoute?.(src) ?? src;
+  } catch {
+    return src;
+  }
+}
+
+function interfaceVolume() {
+  try {
+    const value = game.settings.get("core", "globalInterfaceVolume");
+    return Number.isFinite(value) ? clampVolume(value) : 1;
+  } catch {
+    return 1;
+  }
+}
+
 async function ensureDecoded(src) {
-  if (!src) return null;
+  if (!src || failedBuffers.has(src)) return null;
   const cached = decodedBuffers.get(src);
   if (cached) return cached;
   const inflight = loadingBuffers.get(src);
@@ -69,8 +91,11 @@ async function ensureDecoded(src) {
 
   const task = (async () => {
     try {
-      const response = await fetch(src);
-      if (!response.ok) return null;
+      const response = await fetch(resolveSrc(src));
+      if (!response.ok) {
+        failedBuffers.add(src);
+        return null;
+      }
       const bytes = await response.arrayBuffer();
       const activeCtx = audioContext();
       if (!activeCtx?.decodeAudioData) return null;
@@ -82,6 +107,7 @@ async function ensureDecoded(src) {
       decodedBuffers.set(src, decoded);
       return decoded;
     } catch {
+      failedBuffers.add(src);
       return null;
     } finally {
       loadingBuffers.delete(src);
@@ -151,10 +177,9 @@ export class SoundManager {
         const source = ctx.createBufferSource();
         source.buffer = buffer;
         const gain = ctx.createGain();
-        gain.gain.value = level;
-        const dest = (game.audio?.interface && game.audio.interface.context === ctx)
-          ? game.audio.interface
-          : ctx.destination;
+        gain.gain.value = clampVolume(level * interfaceVolume());
+        const iface = game.audio?.interface;
+        const dest = (iface && iface.context === ctx) ? iface : ctx.destination;
         source.connect(gain);
         gain.connect(dest);
         if (!UNTRACKED.has(key)) {
@@ -237,9 +262,10 @@ export class SoundManager {
     if (!base) {
       this.stopEffects();
     } else {
+      const ifaceScale = interfaceVolume();
       for (const effect of this.effects) {
         const target = clampVolume(base * effect.scale);
-        if (effect.gain) effect.gain.gain.value = target;
+        if (effect.gain) effect.gain.gain.value = clampVolume(target * ifaceScale);
         else if (effect.sound) effect.sound.volume = target;
       }
     }

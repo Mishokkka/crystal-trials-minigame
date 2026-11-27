@@ -7,7 +7,7 @@ from pathlib import Path
 from struct import pack
 import wave
 
-RETRO_RATE = 44100
+RETRO_RATE = 22050
 CRYSTAL_RATE = 22050
 OUTPUT = Path(__file__).resolve().parents[1] / "assets" / "sounds"
 
@@ -236,9 +236,10 @@ def render_voice(mix: list[float], voice: Voice, idx: int, rate: int) -> None:
 
 def postprocess_mix(mix: list[float], active_len: int, rate: int, target_rms: float, peak_cap: float) -> list[int]:
     """Filter ultrasonic aliasing, remove DC, fade edges cleanly, and normalize."""
-    # 1-pole low-pass filter (11.5 kHz) removes harsh ultrasonic aliasing.
+    # 1-pole low-pass filter safely below Nyquist removes harsh aliasing.
     dt = 1.0 / rate
-    rc = 1.0 / (2.0 * pi * 11500.0)
+    cutoff = min(11500.0, rate * 0.40)
+    rc = 1.0 / (2.0 * pi * cutoff)
     alpha = dt / (rc + dt)
     lp = 0.0
     for i, x in enumerate(mix):
