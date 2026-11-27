@@ -222,7 +222,7 @@ export class GravityGame extends ArenaGame {
     state.x = nextX;
 
     const prevY = state.y;
-    const fastFall = dir === 1 ? input.y > 0 : input.y < 0;
+    const fastFall = input.y > 0;
 
     // Check active rideable platforms (from "lava" waves)
     let platSurface = null;
