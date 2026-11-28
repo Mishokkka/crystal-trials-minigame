@@ -35,6 +35,7 @@ const DUPLICATE_COOLDOWN_MS = 28;
 const decodedBuffers = new Map();
 const loadingBuffers = new Map();
 const failedBuffers = new Set();
+const missingLegacyWavs = new Set();
 
 export function registerSoundSettings(onChange) {
   game.settings.register(MODULE_ID, "masterVolume", {
@@ -52,6 +53,7 @@ export function registerSoundSettings(onChange) {
       default: file ? `modules/${MODULE_ID}/assets/sounds/${file}` : "",
       onChange: key === "Bgm" ? onChange : () => {
         failedBuffers.clear();
+        missingLegacyWavs.clear();
         void preloadSounds();
       }
     });
@@ -59,8 +61,11 @@ export function registerSoundSettings(onChange) {
 }
 
 function soundSource(key) {
-  const raw = setting(`sound${key}`)?.trim() ?? "";
-  return LEGACY_WAV_MAP.get(raw) ?? raw;
+  return availableSource(setting(`sound${key}`)?.trim() ?? "");
+}
+
+function availableSource(src) {
+  return missingLegacyWavs.has(src) ? LEGACY_WAV_MAP.get(src) : src;
 }
 
 function volume() {
@@ -97,6 +102,9 @@ async function ensureDecoded(src) {
     try {
       const response = await fetch(resolveSrc(src));
       if (!response.ok) {
+        if (LEGACY_WAV_MAP.has(src) && (response.status === 404 || response.status === 410)) {
+          missingLegacyWavs.add(src);
+        }
         failedBuffers.add(src);
         return null;
       }
@@ -132,7 +140,11 @@ export async function preloadSounds() {
       .filter(key => key !== "Bgm")
       .map(key => soundSource(key))
       .filter(Boolean);
-    await Promise.all(sources.map(src => ensureDecoded(src)));
+    await Promise.all(sources.map(async src => {
+      await ensureDecoded(src);
+      const fallback = availableSource(src);
+      if (fallback !== src) await ensureDecoded(fallback);
+    }));
   } catch {
     // Fall back silently to on-demand AudioHelper playback.
   }
@@ -204,15 +216,21 @@ export class SoundManager {
       }
     }
 
-    if (ctx && !buffer) void ensureDecoded(src);
+    const decode = ctx && !buffer ? ensureDecoded(src) : null;
+    const playFallback = async (isCurrent = () => true) => {
+      if (decode && LEGACY_WAV_MAP.has(src)) await decode;
+      const source = availableSource(src);
+      const currentLevel = clampVolume(volume() * scale);
+      return isCurrent() && source === soundSource(key) && currentLevel ? playAudio(source, currentLevel) : null;
+    };
 
     if (UNTRACKED.has(key)) {
-      void playAudio(src, level);
+      void playFallback();
       return;
     }
     const effect = {sound: null, scale};
     this.effects.add(effect);
-    void playAudio(src, level).then(sound => {
+    void playFallback(() => this.effects.has(effect)).then(sound => {
       if (!sound || !this.effects.has(effect)) {
         stopAudio(sound);
         this.effects.delete(effect);

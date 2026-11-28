@@ -93,7 +93,6 @@ export class TrialOverlay {
         displayedLives: session.lives,
         sequence: 0,
         lastSend: -Infinity,
-        canvasRect: null,
         lastTimeScale: null,
         timeLow: null,
         statusKey: null
@@ -223,16 +222,6 @@ export class TrialOverlay {
     this.bgTimer = setInterval(() => this.backgroundTick(), BG_TICK_MS);
   }
 
-  getCanvasRect(slot, refresh = false) {
-    if (!refresh && slot.canvasRect?.width && slot.canvasRect?.height) return slot.canvasRect;
-    const rect = slot.canvas.getBoundingClientRect?.();
-    if (rect?.width && rect?.height) {
-      slot.canvasRect = rect;
-      return rect;
-    }
-    return null;
-  }
-
   updateMuteButton() {
     if (!this.muteButton) return;
     const muted = Boolean(setting("muteLocal"));
@@ -287,19 +276,11 @@ export class TrialOverlay {
     for (const type of ["pointermove", "mousemove", "wheel"]) {
       this.root.addEventListener(type, event => event.stopPropagation(), {signal});
     }
-    window.addEventListener("resize", () => {
-      for (const slot of this.slots) slot.canvasRect = null;
-    }, {signal});
-
     const active = this.activeSlot;
     if (!active) return;
     if (this.session.gameType === "maze") {
-      active.canvas.addEventListener("pointerenter", () => this.getCanvasRect(active, true), {signal});
       active.canvas.addEventListener("pointermove", event => this.updatePointer(event), {signal});
-      active.canvas.addEventListener("pointerdown", event => {
-        this.getCanvasRect(active, true);
-        this.updatePointer(event);
-      }, {signal});
+      active.canvas.addEventListener("pointerdown", event => this.updatePointer(event), {signal});
       active.canvas.addEventListener("pointerleave", () => this.leavePointer(), {signal});
       active.canvas.addEventListener("pointercancel", () => this.leavePointer(), {signal});
     } else if (this.session.gameType === "timing") {
@@ -309,15 +290,14 @@ export class TrialOverlay {
         this.press("timing");
       }, {signal});
     } else if (this.session.gameType === "aim") {
-      const toPoint = (event, refresh = false) => {
-        const rect = this.getCanvasRect(active, refresh);
-        if (!rect) return null;
+      const toPoint = event => {
+        const rect = active.canvas.getBoundingClientRect();
+        if (!rect.width || !rect.height) return null;
         return {
           x: clamp((event.clientX - rect.left) * WIDTH / rect.width, 0, WIDTH),
           y: clamp((event.clientY - rect.top) * HEIGHT / rect.height, 0, HEIGHT)
         };
       };
-      active.canvas.addEventListener("pointerenter", () => this.getCanvasRect(active, true), {signal});
       active.canvas.addEventListener("pointermove", event => {
         if (!event.isPrimary || this.finished || active.result) return;
         const pt = toPoint(event);
@@ -325,7 +305,7 @@ export class TrialOverlay {
       }, {signal});
       active.canvas.addEventListener("pointerdown", event => {
         if (event.button !== 0 || !event.isPrimary || this.finished || active.result) return;
-        const pt = toPoint(event, true);
+        const pt = toPoint(event);
         if (!pt) return;
         this.advance(this.getNow());
         if (this.started && !active.result && !this.finished) {
@@ -398,8 +378,8 @@ export class TrialOverlay {
   updatePointer(event) {
     const active = this.activeSlot;
     if (!active || active.result || this.finished || !event.isPrimary) return;
-    const rect = this.getCanvasRect(active);
-    if (!rect) return;
+    const rect = active.canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
     const samples = event.getCoalescedEvents?.() ?? [];
     this.advance(this.getNow());
     for (const sample of samples.length ? samples : [event]) {

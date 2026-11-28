@@ -20,6 +20,7 @@ for (let x = 20; x <= WIDTH - 20; x += 22) {
 }
 const SPAWN = {x: WIDTH / 2, y: HEIGHT / 2};
 const PROBES = [...EVAL_POINTS, SPAWN];
+const ARENA_CORNERS = [{x: 0, y: 0}, {x: WIDTH, y: 0}, {x: WIDTH, y: HEIGHT}, {x: 0, y: HEIGHT}];
 
 function keyboardDistance(from, to) {
   const dx = Math.abs(to.x - from.x);
@@ -48,6 +49,42 @@ function sweepHitsPoint(sweep, x, y, margin = 0) {
   const last = dx * sweep.lastX + dy * sweep.lastY;
   const radius = sweep.radius + margin;
   return !((first >= radius && last >= radius) || (first <= -radius && last <= -radius));
+}
+
+function clipSafeSide(points, sweep, nx, ny) {
+  const distance = point => (point.x - sweep.cx) * nx + (point.y - sweep.cy) * ny - sweep.radius;
+  const clipped = [];
+  let previous = points.at(-1);
+  if (!previous) return clipped;
+  let previousDist = distance(previous);
+  for (const point of points) {
+    const dist = distance(point);
+    if ((previousDist >= 0) !== (dist >= 0)) {
+      const fraction = previousDist / (previousDist - dist);
+      clipped.push({x: previous.x + fraction * (point.x - previous.x), y: previous.y + fraction * (point.y - previous.y)});
+    }
+    if (dist >= 0) clipped.push(point);
+    previous = point;
+    previousDist = dist;
+  }
+  return clipped;
+}
+
+function drawSweepWarning(ctx, attack, progress) {
+  const sweep = beamSweep(attack, attack.fire, attack.end);
+  ctx.beginPath();
+  ctx.rect(0, 0, WIDTH, HEIGHT);
+  for (const side of [-1, 1]) {
+    const firstSafe = clipSafeSide(ARENA_CORNERS, sweep, side * sweep.firstX, side * sweep.firstY);
+    const safe = clipSafeSide(firstSafe, sweep, side * sweep.lastX, side * sweep.lastY);
+    if (safe.length < 3) continue;
+    ctx.moveTo(safe[0].x, safe[0].y);
+    for (const point of safe.slice(1)) ctx.lineTo(point.x, point.y);
+    ctx.closePath();
+  }
+  ctx.fillStyle = PALETTE.crimson;
+  ctx.globalAlpha = 0.16 + progress * 0.12;
+  ctx.fill("evenodd");
 }
 
 function borderIntersections(cx, cy, angle) {
@@ -271,6 +308,7 @@ export class BeamsGame extends ArenaGame {
       ctx.save();
       if (aiming) {
         const progress = clamp((time - attack.cue) / (attack.fire - attack.cue), 0, 1);
+        if (attack.spin !== 0) drawSweepWarning(ctx, attack, progress);
         ctx.fillStyle = `rgba(245, 158, 11, ${0.08 + progress * 0.12})`;
         ctx.beginPath();
         ctx.moveTo(p1.x + nx * attack.width / 2, p1.y + ny * attack.width / 2);
