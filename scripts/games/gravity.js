@@ -24,20 +24,20 @@ function hitsStalactite(px, py, col, tipY, surfDir, r) {
 
 const LEVELS = {
   easy: {
-    moveSpeed: 215, warning: 0.56, speed: [195, 225], interval: [1.35, 1.58],
-    heights: [22, 40], maxChain: 2, gateChance: 0, stalChance: 0.25, lavaCount: 0, flipCount: 0
+    moveSpeed: 215, warning: 0.56, speed: [228, 260], interval: [1.12, 1.30],
+    heights: [27, 48], maxChain: 3, gateChance: 0, stalChance: 0.29, lavaCount: 0, flipCount: 0
   },
   medium: {
-    moveSpeed: 230, warning: 0.48, speed: [235, 280], interval: [1.08, 1.32],
-    heights: [26, 52], maxChain: 3, gateChance: 0.28, stalChance: 0.32, lavaSpeed: [225, 255], lavaCount: 1, flipCount: 0
+    moveSpeed: 230, warning: 0.48, speed: [270, 320], interval: [0.87, 1.07],
+    heights: [31, 57], maxChain: 3, gateChance: 0.30, stalChance: 0.34, lavaSpeed: [242, 275], lavaCount: 1, flipCount: 0
   },
   hard: {
-    moveSpeed: 252, warning: 0.42, speed: [305, 390], interval: [0.85, 1.06],
-    heights: [30, 62], maxChain: 3, gateChance: 0.36, stalChance: 0.38, lavaSpeed: [250, 285], lavaCount: 1, flipCount: 1
+    moveSpeed: 252, warning: 0.42, speed: [345, 420], interval: [0.73, 0.91],
+    heights: [35, 66], maxChain: 4, gateChance: 0.37, stalChance: 0.38, lavaSpeed: [270, 300], lavaCount: 1, flipCount: 1
   },
   insane: {
-    moveSpeed: 272, warning: 0.37, speed: [360, 450], interval: [0.70, 0.85],
-    heights: [32, 66], maxChain: 4, gateChance: 0.42, stalChance: 0.42, lavaSpeed: [280, 315], lavaCount: 2, flipCount: 2
+    moveSpeed: 272, warning: 0.37, speed: [400, 485], interval: [0.65, 0.79],
+    heights: [39, 73], maxChain: 5, gateChance: 0.42, stalChance: 0.42, lavaSpeed: [298, 338], lavaCount: 2, flipCount: 2
   }
 };
 
@@ -87,14 +87,41 @@ export class GravityGame extends ArenaGame {
     );
   }
 
+  rowWidth(row) {
+    return row.kind === "gate" ? row.width : row.sizes.reduce((span, spike) => span + spike.width + 3, -3);
+  }
+
   rowEnd(row) {
     if (row.kind === "stalactite") return row.start + (FLOOR - CEILING + STAL_HEIGHT) / row.speed;
     if (row.kind === "lava") return row.start + (WIDTH + row.surgeLen + LAVA_TAIL) / row.speed;
-    const width = row.kind === "gate" ? row.width : row.sizes.reduce((span, spike) => span + spike.width + 3, -3);
-    return row.start + (WIDTH + width) / row.speed;
+    return row.start + (WIDTH + this.rowWidth(row)) / row.speed;
   }
 
-  buildLava(impact, direction, surfDir) {
+  placeCrossing(rows, impact, routeX, earliestStart) {
+    const leadTimes = rows.map(row => {
+      const distance = row.direction === 1 ? routeX : WIDTH - routeX;
+      return (distance + this.rowWidth(row) / 2) / row.speed;
+    });
+    impact = Math.max(impact, earliestStart + Math.max(...leadTimes));
+    for (const {start, end} of this.flips) {
+      for (const transition of [start, end]) {
+        if (impact > transition - 0.37 && impact < transition + FLIP_SETTLE + 0.37) {
+          const dropStart = Math.max(earliestStart, transition - 0.17);
+          if (this.insane && dropStart < this.duration - 0.75) {
+            this.addStalactites(dropStart, this.surfaceAt(transition).dir, routeX);
+          }
+          impact = transition + FLIP_SETTLE + 0.37;
+        }
+      }
+    }
+    if (impact < this.duration - 0.45) {
+      const {dir: surfDir} = this.surfaceAt(impact);
+      this.rows.push(...rows.map((row, index) => ({...row, surfDir, start: impact - leadTimes[index]})));
+    }
+    return impact;
+  }
+
+  buildLava(impact, direction, surfDir, earliestStart = this.cfg.warning + 0.05) {
     const {warning} = this.cfg;
     const speed = this.between(...this.cfg.lavaSpeed);
     const surgeLen = this.between(330, 420);
@@ -102,7 +129,7 @@ export class GravityGame extends ArenaGame {
     const lastFlip = transitions.filter(time => time <= impact).at(-1) ?? -Infinity;
     const nextFlip = transitions.find(time => time > impact) ?? Infinity;
     const clearTime = this.rows.reduce((latest, row) => Math.max(latest, this.rowEnd(row)), 0);
-    const platStart = Math.max(warning + 0.05, impact - WIDTH / 2 / speed - LAVA_LEAD,
+    const platStart = Math.max(earliestStart, impact - WIDTH / 2 / speed - LAVA_LEAD,
       clearTime + 0.22, lastFlip + FLIP_SETTLE);
     if (platStart >= nextFlip) return null;
 
@@ -124,11 +151,35 @@ export class GravityGame extends ArenaGame {
     return row;
   }
 
+  addStalactites(start, surfDir, routeX) {
+    const previous = this.rows.findLast(row => row.kind === "stalactite");
+    if (previous) start = Math.max(start, this.rowEnd(previous));
+    if (start >= this.duration - 0.75) return;
+    const dropWarn = Math.max(0.56, this.cfg.warning + 0.20);
+    const dropSpeed = this.between(540, 680);
+    const safeCenter = routeX + this.between(-46, 46);
+    const safeLeft = safeCenter - 62;
+    const safeRight = safeCenter + 62;
+    const cols = [];
+    const leftW = this.between(34, 42);
+    if (safeLeft - leftW >= 24) cols.push({x: this.between(24, safeLeft - leftW), w: leftW});
+    const centerW = 40;
+    const centerX = WIDTH / 2 - centerW / 2 + this.between(-18, 18);
+    if (centerX + centerW <= safeLeft || centerX >= safeRight) cols.push({x: centerX, w: centerW});
+    const rightW = this.between(34, 42);
+    if (safeRight + rightW <= WIDTH - 24) cols.push({x: this.between(safeRight, WIDTH - 24 - rightW), w: rightW});
+    this.rows.push({kind: "stalactite", start, cue: start - dropWarn, speed: dropSpeed, cols, surfDir});
+    this.cues.push({time: Math.max(0.05, start - dropWarn), sound: "Telegraph"});
+  }
+
   buildGauntlet() {
     const {warning, speed: speedRange, interval, heights, maxChain, gateChance, stalChance, lavaCount} = this.cfg;
     const minImpact = warning + 0.08 + WIDTH / 2 / speedRange[0];
     let impact = Math.max(1.18, minImpact);
     let prevDirection = this.direction;
+    const routeX = WIDTH / 2 + this.direction * this.between(62, 90);
+    let earliestStart = warning + 0.05;
+    let jumpLandsBy = 0;
     let lavasPlaced = 0;
 
     while (impact < this.duration - 0.45) {
@@ -139,106 +190,66 @@ export class GravityGame extends ArenaGame {
 
       // Lava wave with rideable floating platform
       if (lavasPlaced < lavaCount && !nearFlip && impact > 2.2 && impact < this.duration - 2.3 && this.random() < 0.35) {
-        const row = this.buildLava(impact, direction, surfDir);
+        const row = this.buildLava(impact, direction, surfDir, earliestStart);
         if (row) {
           this.rows.push(row);
           lavasPlaced++;
-          impact = this.rowEnd(row) + LAVA_RECOVERY + WIDTH / 2 / speedRange[0];
+          earliestStart = this.rowEnd(row) + LAVA_RECOVERY;
+          impact = earliestStart + 0.35;
           continue;
         }
       }
 
       // Falling stalactites targeting center + side, guaranteeing >=124px continuous safe corridor
       if (!nearFlip && this.random() < stalChance) {
-        const start = Math.max(warning + 0.65, impact - 0.35);
-        const dropWarn = Math.max(0.56, warning + 0.20);
-        const dropSpeed = this.between(540, 680);
-        if (start < this.duration - 0.75) {
-          const safeCenter = this.random() < 0.5
-            ? this.between(68, 165)
-            : this.between(WIDTH - 165, WIDTH - 68);
-          const safeHalf = 62;
-          const safeLeft = safeCenter - safeHalf;
-          const safeRight = safeCenter + safeHalf;
-          const cols = [];
-          // Left block if space (respecting block width so corridor stays >= 124px)
-          const leftW = this.between(34, 42);
-          if (safeLeft - leftW >= 24) {
-            cols.push({x: this.between(24, safeLeft - leftW), w: leftW});
-          }
-          // Center block forcing player off center without intruding into safe corridor
-          const centerW = 40;
-          const centerX = WIDTH / 2 - centerW / 2 + this.between(-18, 18);
-          if (centerX + centerW <= safeLeft || centerX >= safeRight) {
-            cols.push({x: centerX, w: centerW});
-          }
-          // Right block if space
-          const rightW = this.between(34, 42);
-          if (safeRight + rightW <= WIDTH - 24) {
-            cols.push({x: this.between(safeRight, WIDTH - 24 - rightW), w: rightW});
-          }
-          if (cols.length) {
-            this.rows.push({
-              kind: "stalactite",
-              start,
-              cue: start - dropWarn,
-              speed: dropSpeed,
-              cols,
-              surfDir
-            });
-            this.cues.push({time: Math.max(0.05, start - dropWarn), sound: "Telegraph"});
-          }
-        }
+        const start = Math.max(earliestStart, warning + 0.65, impact - 0.35);
+        this.addStalactites(start, surfDir, routeX);
         impact += this.between(...interval) * 0.9;
         continue;
       }
 
       const speed = this.between(...speedRange);
-      const minStart = warning + 0.05;
-      const start = Math.max(minStart, impact - WIDTH / 2 / speed);
-      if (start >= this.duration - 0.85) {
-        impact += 1;
-        continue;
-      }
+      const rows = [];
 
       // Gate: simultaneous low surface spike + upper floating prism requiring controlled jump height
       if (!nearFlip && this.random() < gateChance) {
         const spikeH = this.between(26, 36);
         const gapH = this.between(54, 62);
-        this.rows.push({
+        rows.push({
           kind: "gate",
-          start,
           direction,
           speed,
           width: this.between(36, 48),
           spikeH,
           prismBottom: spikeH + gapH,
-          prismThick: 18,
-          surfDir
+          prismThick: 18
         });
       } else {
-        const paired = !nearFlip && (this.hard || this.insane) && this.random() < (this.insane ? 0.42 : 0.32);
+        const paired = !nearFlip && (this.hard || this.insane) && this.random() < (this.insane ? 0.52 : 0.40);
         const dirs = paired ? [direction, -direction] : [direction];
         for (const side of dirs) {
           const sSpeed = side === direction ? speed : this.between(...speedRange);
-          const stagger = side === direction ? 0 : this.between(-0.03, 0.035);
-          const rStart = Math.max(minStart, impact - WIDTH / 2 / sSpeed + stagger);
-          if (rStart >= this.duration - 0.85) continue;
-          const cap = paired ? Math.min(2, maxChain) : maxChain;
-          const count = 1 + Math.floor(this.random() * cap);
-          const maxChainW = sSpeed * 0.32 - SOUL_RADIUS * 2;
-          const maxEachW = Math.max(16, Math.floor((maxChainW - (count - 1) * 3) / count));
+          const jumpWindow = this.insane ? 0.23 : this.hard ? 0.28 : 0.34;
+          const maxChainW = sSpeed * jumpWindow - SOUL_RADIUS * 2;
+          const cap = Math.min(paired && !this.insane ? 2 : maxChain, Math.floor((maxChainW + 3) / 19));
+          const minChain = this.insane ? Math.min(paired ? 2 : 3, cap) : 1;
+          const count = minChain + Math.floor(this.random() * (cap - minChain + 1));
+          const maxEachW = Math.floor((maxChainW - (count - 1) * 3) / count);
           const maxW = Math.min(count < 3 ? 28 : 22, maxEachW);
           const minW = Math.min(17, maxW);
           const sizes = Array.from({length: count}, () => ({
             width: this.between(minW, maxW),
             height: this.between(...heights)
           }));
-          this.rows.push({kind: "floor", start: rStart, direction: side, speed: sSpeed, sizes, surfDir});
+          rows.push({kind: "floor", direction: side, speed: sSpeed, sizes});
         }
       }
 
-      impact += Math.max(this.insane ? 0.71 : 0.74, this.between(...interval));
+      const isGate = rows[0].kind === "gate";
+      const jumpLead = isGate ? 0.275 : 0.367;
+      const crossing = this.placeCrossing(rows, Math.max(impact, jumpLandsBy + jumpLead), routeX, earliestStart);
+      jumpLandsBy = crossing + (isGate ? 0.29 : this.insane ? 0.325 : 0.38);
+      impact = crossing + this.between(...interval);
     }
   }
 

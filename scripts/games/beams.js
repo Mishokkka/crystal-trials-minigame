@@ -1,27 +1,47 @@
 import {ArenaGame, HEIGHT, PALETTE, SOUL_RADIUS, WIDTH, clamp, crystal, drawGlow, drawSoul} from "./base.js";
 
 const LEVELS = {
-  easy: {warning: [0.95, 0.95], fireDur: [0.36, 0.36], step: [1.30, 1.48], minSafeFrac: 0.42, moveSpeed: 218, spinChance: 0},
-  medium: {warning: [0.80, 0.80], fireDur: [0.34, 0.38], step: [1.02, 1.24], minSafeFrac: 0.28, moveSpeed: 230, spinChance: 0},
-  hard: {warning: [0.54, 0.66], fireDur: [0.32, 0.44], step: [0.76, 0.98], minSafeFrac: 0.16, moveSpeed: 252, spinChance: 0.32},
-  insane: {warning: [0.43, 0.54], fireDur: [0.32, 0.46], step: [0.60, 0.80], minSafeFrac: 0.11, moveSpeed: 274, spinChance: 0.48}
+  easy: {warning: [0.95, 0.95], fireDur: [0.36, 0.36], step: [1.30, 1.48], minSafeFrac: 0.42, moveSpeed: 218, spinChance: 0, width: [27, 33], spacing: [76, 98], rays: 5},
+  medium: {warning: [0.80, 0.80], fireDur: [0.34, 0.38], step: [1.02, 1.24], minSafeFrac: 0.28, moveSpeed: 230, spinChance: 0, width: [30, 37], spacing: [68, 88], rays: 6},
+  hard: {warning: [0.54, 0.66], fireDur: [0.32, 0.44], step: [0.76, 0.98], minSafeFrac: 0.16, moveSpeed: 252, spinChance: 0.32, width: [34, 42], spacing: [61, 80], rays: 7},
+  insane: {warning: [0.43, 0.54], fireDur: [0.32, 0.46], step: [0.60, 0.80], minSafeFrac: 0.11, moveSpeed: 274, spinChance: 0.48, width: [37, 46], spacing: [56, 73], rays: 8}
 };
 
-// 5x4 probe grid including spawn center (240, 180) so AFK spots are tracked deterministically
-const PROBES = [];
-for (const x of [50, 145, 240, 335, 430]) {
-  for (const y of [55, 138, 222, 305]) PROBES.push({x, y});
-}
+const REACTION_SEC = 0.20;
+const ARRIVAL_MARGIN = 0.025;
+const CANDIDATE_ATTEMPTS = 28;
+const CELL_SIZE = 10;
+const CELL_RADIUS = CELL_SIZE / Math.SQRT2;
+const COVERAGE_CELLS = (WIDTH / CELL_SIZE) * (HEIGHT / CELL_SIZE);
 
 const EVAL_POINTS = [];
-for (let x = 25; x <= WIDTH - 25; x += 43) {
-  for (let y = 25; y <= HEIGHT - 25; y += 39) EVAL_POINTS.push({x, y});
+for (let x = 20; x <= WIDTH - 20; x += 22) {
+  for (let y = 18; y <= HEIGHT - 18; y += 27) EVAL_POINTS.push({x, y});
 }
+const SPAWN = {x: WIDTH / 2, y: HEIGHT / 2};
+const PROBES = [...EVAL_POINTS, SPAWN];
 
 function beamHitsPoint(beam, time, px, py) {
   const angle = beam.angle + beam.spin * (time - beam.fire);
   const dist = Math.abs((px - beam.cx) * (-Math.sin(angle)) + (py - beam.cy) * Math.cos(angle));
   return dist < beam.width / 2 + SOUL_RADIUS;
+}
+
+function beamSweep(beam, start, end) {
+  const first = beam.angle + beam.spin * (Math.max(start, beam.fire) - beam.fire);
+  const last = beam.angle + beam.spin * (Math.min(end, beam.end) - beam.fire);
+  return {
+    cx: beam.cx, cy: beam.cy, radius: beam.width / 2 + SOUL_RADIUS,
+    firstX: -Math.sin(first), firstY: Math.cos(first), lastX: -Math.sin(last), lastY: Math.cos(last)
+  };
+}
+
+function sweepHitsPoint(sweep, x, y, margin = 0) {
+  const dx = x - sweep.cx, dy = y - sweep.cy;
+  const first = dx * sweep.firstX + dy * sweep.firstY;
+  const last = dx * sweep.lastX + dy * sweep.lastY;
+  const radius = sweep.radius + margin;
+  return !((first >= radius && last >= radius) || (first <= -radius && last <= -radius));
 }
 
 function borderIntersections(cx, cy, angle) {
@@ -58,149 +78,125 @@ export class BeamsGame extends ArenaGame {
   }
 
   buildVolleys() {
-    let prevSafe = PROBES.filter(p => Math.hypot(p.x - WIDTH / 2, p.y - HEIGHT / 2) < 95);
+    let prevSafe = [SPAWN];
+    let prevEnd = 0;
     let fire = 0.72;
     while (fire < this.duration - 0.35) {
       const warn = this.between(...this.cfg.warning);
       const cue = Math.max(0.05, fire - warn);
       const fireDur = this.between(...this.cfg.fireDur);
       const end = fire + fireDur;
-      const maxReach = this.cfg.moveSpeed * (fire - cue) * 0.75;
+      const preferScanner = this.cfg.spinChance > 0 && this.random() < this.cfg.spinChance;
+      const departure = Math.max(prevEnd, cue + REACTION_SEC);
+      const maxReach = this.cfg.moveSpeed * Math.max(0, fire - ARRIVAL_MARGIN - departure);
+      const reachSq = maxReach ** 2;
+      const reachableProbes = PROBES.filter(probe => prevSafe.some(previous =>
+        (probe.x - previous.x) ** 2 + (probe.y - previous.y) ** 2 <= reachSq
+      ));
 
       const maxCheckEnd = Math.max(end, fire + 0.55);
       const activeEarlier = this.attacks.filter(a => a.end > fire && a.fire < maxCheckEnd);
-      let bestVolley = null;
-      let bestScore = -1;
-      let bestSafeProbes = null;
+      let best = null;
 
-      for (let attempt = 0; attempt < 12; attempt++) {
-        const beams = this.generateCandidate(cue, fire, end, prevSafe);
+      const evaluate = (beams, minScore = -Infinity) => {
         const checkEnd = Math.max(end, ...beams.map(b => b.end));
-        const combined = [...activeEarlier, ...beams];
-        const safeFrac = this.measureSafeFraction(combined, fire, checkEnd);
-        if (safeFrac < this.cfg.minSafeFrac) continue;
+        const sweeps = [...activeEarlier, ...beams].map(beam => beamSweep(beam, fire, checkEnd));
+        const safeProbes = reachableProbes.filter(probe =>
+          !sweeps.some(sweep => sweepHitsPoint(sweep, probe.x, probe.y, 3)));
+        if (!safeProbes.length) return null;
+        const safeFrac = this.measureSafeFraction(sweeps);
+        if (safeFrac < this.cfg.minSafeFrac) return null;
+        const coveredPrev = prevSafe.filter(probe =>
+          sweeps.some(sweep => sweepHitsPoint(sweep, probe.x, probe.y))).length;
+        const scannerBonus = preferScanner && beams.some(beam => beam.spin !== 0) ? 0.65 : 0;
+        const score = 2 * coveredPrev / prevSafe.length + (1 - safeFrac) + 0.015 * beams.length + scannerBonus;
+        if (score <= minScore || !this.hasSafeArea(sweeps)) return null;
+        return {beams, checkEnd, safeProbes, score};
+      };
 
-        const safeProbes = PROBES.filter(p =>
-          !this.pointHitInInterval(combined, p.x, p.y, fire, checkEnd)
-        );
-        const reachable = safeProbes.some(sp =>
-          prevSafe.some(ps => Math.hypot(sp.x - ps.x, sp.y - ps.y) <= maxReach)
-        );
-        if (!reachable) continue;
-
-        const coveredPrev = prevSafe.filter(ps => this.pointHitInInterval(beams, ps.x, ps.y, fire, checkEnd)).length;
-        const score = coveredPrev * 10 + safeFrac;
-        if (score > bestScore) {
-          bestScore = score;
-          bestVolley = beams;
-          bestSafeProbes = safeProbes;
-        }
+      for (let attempt = 0; attempt < CANDIDATE_ATTEMPTS; attempt++) {
+        const candidate = evaluate(this.generateCandidate(cue, fire, end, prevSafe, preferScanner), best?.score);
+        if (candidate) best = candidate;
       }
 
-      if (!bestVolley) {
-        const target = prevSafe[Math.floor(this.random() * prevSafe.length)] ?? {x: WIDTH / 2, y: HEIGHT / 2};
-        const angle = this.between(0, Math.PI);
-        bestVolley = [{cue, fire, end, cx: target.x, cy: target.y, angle, spin: 0, width: 40}];
-        bestSafeProbes = PROBES.filter(p => !this.pointHitInInterval(bestVolley, p.x, p.y, fire, end));
-      }
-
-      this.attacks.push(...bestVolley);
+      best ??= this.buildFallback(cue, fire, end, prevSafe[0], evaluate);
+      this.attacks.push(...best.beams);
       this.cues.push({time: cue, sound: "Telegraph"}, {time: fire, sound: "BeamFire"});
-      if (bestSafeProbes?.length) prevSafe = bestSafeProbes;
+      prevSafe = best.safeProbes;
+      prevEnd = best.checkEnd;
       fire += this.between(...this.cfg.step);
     }
   }
 
-  measureSafeFraction(beams, fire, end) {
-    const times = [fire, (fire + end) / 2, end - 0.02];
+  measureSafeFraction(sweeps) {
     let safe = 0;
     for (const pt of EVAL_POINTS) {
-      const hit = times.some(t => beams.some(b => t >= b.fire && t < b.end && beamHitsPoint(b, t, pt.x, pt.y)));
+      const hit = sweeps.some(sweep => sweepHitsPoint(sweep, pt.x, pt.y));
       if (!hit) safe++;
     }
     return safe / EVAL_POINTS.length;
   }
 
-  pointHitInInterval(beams, x, y, fire, end) {
-    for (const t of [fire, (fire + end) / 2, end - 0.02]) {
-      if (beams.some(b => t >= b.fire && t < b.end && beamHitsPoint(b, t, x, y))) return true;
+  hasSafeArea(sweeps) {
+    let required = Math.ceil(this.cfg.minSafeFrac * COVERAGE_CELLS);
+    let allowedHits = COVERAGE_CELLS - required;
+    for (let x = CELL_SIZE / 2; x < WIDTH; x += CELL_SIZE) {
+      for (let y = CELL_SIZE / 2; y < HEIGHT; y += CELL_SIZE) {
+        if (sweeps.some(sweep => sweepHitsPoint(sweep, x, y, CELL_RADIUS))) {
+          if (--allowedHits < 0) return false;
+        } else if (--required === 0) return true;
+      }
     }
     return false;
   }
 
-  generateCandidate(cue, fire, end, prevSafe) {
-    const anchor = prevSafe[Math.floor(this.random() * prevSafe.length)] ?? {x: WIDTH / 2, y: HEIGHT / 2};
-    const isHard = this.hard || this.insane;
-    const width = isHard ? this.between(40, 56) : this.between(32, 42);
+  buildFallback(cue, fire, end, pocket, evaluate) {
+    const width = this.cfg.width[0];
+    const spacing = this.cfg.spacing[0];
+    let best = evaluate([]);
+    for (let cy = spacing / 2; cy < HEIGHT; cy += spacing) {
+      if (Math.abs(cy - pocket.y) <= width / 2 + SOUL_RADIUS + 3) continue;
+      const rail = {cue, fire, end, cx: SPAWN.x, cy, angle: 0, spin: 0, width};
+      best = evaluate([...best.beams, rail]) ?? best;
+    }
+    return best;
+  }
+
+  generateCandidate(cue, fire, end, prevSafe, preferScanner) {
+    const anchor = prevSafe[Math.floor(this.random() * prevSafe.length)];
+    const width = this.between(...this.cfg.width);
     const kindRoll = this.random();
 
-    // Sweeping scanner on Hard / Insane
-    if (this.random() < this.cfg.spinChance) {
-      const sweepEnd = fire + this.between(0.42, 0.52);
-      const spin = this.direction * this.between(0.40, 0.68);
-      const baseAngle = this.between(0, Math.PI);
-      const beams = [{cue, fire, end: sweepEnd, cx: anchor.x, cy: anchor.y, angle: baseAngle, spin, width: width * 0.85}];
-      if (this.insane || this.random() < 0.55) {
-        const off = this.between(65, 115) * this.direction;
-        const a2 = baseAngle + Math.PI / 2;
-        beams.push({
-          cue, fire, end: sweepEnd,
-          cx: clamp(anchor.x + Math.cos(a2) * off, 60, WIDTH - 60),
-          cy: clamp(anchor.y + Math.sin(a2) * off, 55, HEIGHT - 55),
-          angle: a2, spin: 0, width: width * 0.85
-        });
-      }
-      return beams;
-    }
-
-    // Family 1: X-cross through an active safe anchor
-    if (kindRoll < 0.34) {
-      const a1 = this.between(0.18, Math.PI - 0.18);
-      const a2 = a1 + this.between(0.68, 1.35);
-      const beams = [
-        {cue, fire, end, cx: anchor.x, cy: anchor.y, angle: a1, spin: 0, width},
-        {cue, fire, end, cx: anchor.x, cy: anchor.y, angle: a2, spin: 0, width}
-      ];
-      if (isHard && this.random() < 0.65) {
-        const shift = this.direction * this.between(95, 130);
-        beams.push({
-          cue, fire, end,
-          cx: clamp(anchor.x - Math.sin(a1) * shift, 40, WIDTH - 40),
-          cy: clamp(anchor.y + Math.cos(a1) * shift, 40, HEIGHT - 40),
-          angle: a1, spin: 0, width: width * 0.9
-        });
-      }
-      return beams;
-    }
-
-    // Family 2: Gaster-Blaster perimeter fan (3-5 rays from one edge point)
-    if (kindRoll < 0.68) {
+    // Gaster-Blaster perimeter fan
+    if (kindRoll < 0.36) {
       const side = Math.floor(this.random() * 4);
       const ex = side === 0 ? 18 : side === 1 ? WIDTH - 18 : this.between(90, WIDTH - 90);
       const ey = side === 2 ? 18 : side === 3 ? HEIGHT - 18 : this.between(70, HEIGHT - 70);
       const aimAngle = Math.atan2(anchor.y - ey, anchor.x - ex);
-      const rayCount = this.insane ? 5 : this.hard ? 4 : 3;
-      const step = this.between(0.28, 0.40);
-      const startOffset = -((rayCount - 1) / 2) * step;
-      return Array.from({length: rayCount}, (_, i) => ({
-        cue, fire, end, cx: ex, cy: ey, angle: aimAngle + startOffset + i * step, spin: 0, width: width * 0.78
+      const rayCount = this.cfg.rays;
+      const step = this.between(0.23, 0.37);
+      const center = Math.floor(rayCount / 2) - (rayCount % 2 === 0 && this.random() < 0.5 ? 1 : 0);
+      return Array.from({length: rayCount}, (_, index) => ({
+        cue, fire, end, cx: ex, cy: ey, angle: aimAngle + (index - center) * step, spin: 0, width: width * 0.85
       }));
     }
 
-    // Family 3: Angled parallel grid / diagonal volley
-    const angleChoices = [0, Math.PI / 6, Math.PI / 4, Math.PI / 3, Math.PI / 2, 2 * Math.PI / 3, 3 * Math.PI / 4, 5 * Math.PI / 6];
-    const base = angleChoices[Math.floor(this.random() * angleChoices.length)] + this.between(-0.12, 0.12);
-    const nx = -Math.sin(base), ny = Math.cos(base);
-    const count = this.insane ? 4 : isHard ? 3 : 2;
-    const spacing = this.between(88, 122);
-    const beams = [];
-    for (let i = 0; i < count; i++) {
-      const offset = (i - Math.floor(count / 2)) * spacing;
-      beams.push({cue, fire, end, cx: anchor.x + nx * offset, cy: anchor.y + ny * offset, angle: base, spin: 0, width});
+    const angle = this.between(0, Math.PI);
+    const scanning = preferScanner && this.random() < 0.65;
+    const spacing = this.between(...this.cfg.spacing) * (scanning ? 1.24 : 1);
+    const nx = -Math.sin(angle), ny = Math.cos(angle);
+    const centerBeam = {cue, fire, end, cx: anchor.x, cy: anchor.y, angle, spin: 0, width};
+    const beams = [scanning ? {...centerBeam, end: fire + this.between(0.42, 0.52),
+      spin: this.direction * this.between(0.32, 0.53), width: width * 0.80} : centerBeam];
+    for (const side of [-1, 1]) {
+      for (let offset = spacing; offset < WIDTH + HEIGHT; offset += spacing) {
+        const cx = anchor.x + nx * offset * side, cy = anchor.y + ny * offset * side;
+        if (!borderIntersections(cx, cy, angle)) break;
+        beams.push({...centerBeam, cx, cy});
+      }
     }
-    if (isHard && this.random() < 0.6) {
-      const crossAngle = base + Math.PI / 2 + this.between(-0.2, 0.2);
-      beams.push({cue, fire, end, cx: anchor.x, cy: anchor.y, angle: crossAngle, spin: 0, width: width * 0.9});
+    if (kindRoll > 0.73) {
+      beams.push({...centerBeam, angle: angle + this.between(0.68, 1.35), width: width * 0.9});
     }
     return beams;
   }
@@ -235,7 +231,7 @@ export class BeamsGame extends ArenaGame {
       ctx.save();
       if (aiming) {
         const progress = clamp((time - attack.cue) / (attack.fire - attack.cue), 0, 1);
-        ctx.fillStyle = `rgba(245, 158, 11, ${0.12 + progress * 0.16})`;
+        ctx.fillStyle = `rgba(245, 158, 11, ${0.08 + progress * 0.12})`;
         ctx.beginPath();
         ctx.moveTo(p1.x + nx * attack.width / 2, p1.y + ny * attack.width / 2);
         ctx.lineTo(p2.x + nx * attack.width / 2, p2.y + ny * attack.width / 2);
