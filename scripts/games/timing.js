@@ -20,6 +20,8 @@ export const TIMING_RULES = {
 };
 
 const TRACK_SAMPLES = 64;
+const FIRST_HIT_RUNWAY_SEC = 0.50;
+const HIT_TOLERANCE_U = 0.008;
 
 function buildTrack(shape, flip = 1, variant = 0, angle0 = -Math.PI / 2) {
   const raw = [];
@@ -227,6 +229,12 @@ export class TimingGame extends ArenaGame {
             if (Math.abs(u0 - prevU) >= 0.13) break;
           }
         }
+        if (index === 0) {
+          const fromStart = forward ? u0 : 1 - u0;
+          const minFromStart = FIRST_HIT_RUNWAY_SEC / length + halfU + HIT_TOLERANCE_U + moveAmp[1];
+          const centerFromStart = Math.min(0.78, Math.max(fromStart + 0.07, minFromStart));
+          u0 = forward ? centerFromStart : 1 - centerFromStart;
+        }
         prevU = u0;
         zones.push(makeZone(u0, 0.16));
       }
@@ -280,6 +288,15 @@ export class TimingGame extends ArenaGame {
     }
   }
 
+  recordStrike({x, y}, time, kind) {
+    this.showStrike({x, y, kind}, time);
+    this.onEvent(kind === "miss" ? "timingMiss" : "timingHit", {x, y, kind});
+  }
+
+  showStrike({x, y, kind}, time) {
+    this.strikes.push({x, y, kind, time});
+  }
+
   press(action, time) {
     if (action !== "timing" || this.result) return;
     const {pass, u, pos, live} = this.sliderAt(time);
@@ -289,14 +306,13 @@ export class TimingGame extends ArenaGame {
 
     this.state.x = pos.x;
     this.state.y = pos.y;
-    const matched = pending.find(z => Math.abs(u - this.zoneCenterU(z, time)) <= z.halfU + 0.008);
+    const matched = pending.find(z => Math.abs(u - this.zoneCenterU(z, time)) <= z.halfU + HIT_TOLERANCE_U);
     if (matched) {
       this.markAttempt(matched.id);
       this.state.progress++;
       const distU = Math.abs(u - this.zoneCenterU(matched, time));
       const kind = distU <= matched.coreHalfU + 0.004 ? "perfect" : "hit";
-      this.strikes.push({x: pos.x, y: pos.y, time, kind});
-      this.onEvent("timingHit");
+      this.recordStrike(pos, time, kind);
       if (this.state.progress >= this.rules.required) {
         this.finish(true, "timing", time);
       }
@@ -305,20 +321,9 @@ export class TimingGame extends ArenaGame {
 
     const missedZone = pending[0];
     this.markAttempt(missedZone.id);
-    this.strikes.push({x: pos.x, y: pos.y, time, kind: "miss"});
+    this.recordStrike(pos, time, "miss");
     this.damage(time, 0.22);
     this.checkEarlyLoss(time);
-  }
-
-  syncSpectatorStrike(time, event = "timingHit") {
-    const sl = this.sliderAt(time);
-    if (event === "hit") {
-      this.strikes.push({x: sl.pos.x, y: sl.pos.y, time, kind: "miss"});
-      return;
-    }
-    const z = sl.pass.zones.find(zone => Math.abs(sl.u - this.zoneCenterU(zone, time)) <= zone.halfU + 0.02);
-    const kind = z && Math.abs(sl.u - this.zoneCenterU(z, time)) <= z.coreHalfU + 0.008 ? "perfect" : "hit";
-    this.strikes.push({x: sl.pos.x, y: sl.pos.y, time, kind});
   }
 
   update(dt, time) {
@@ -336,7 +341,7 @@ export class TimingGame extends ArenaGame {
         if (!pastZone) continue;
         this.markAttempt(z.id);
         const zp = evalTrack(pass.track, this.zoneCenterU(z, time));
-        this.strikes.push({x: zp.x, y: zp.y, time, kind: "miss"});
+        this.recordStrike(zp, time, "miss");
         this.damage(time, 0.22);
         this.checkEarlyLoss(time);
         if (this.result) return;
@@ -411,7 +416,7 @@ export class TimingGame extends ArenaGame {
         ctx.stroke();
       }
       ctx.restore();
-      if (!done && live && Math.abs(u - zc) <= z.halfU + 0.008) anyInZone = true;
+      if (!done && live && Math.abs(u - zc) <= z.halfU + HIT_TOLERANCE_U) anyInZone = true;
     }
 
     // 3. Converging rhythm pips around focus zone along track normals

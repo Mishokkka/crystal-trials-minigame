@@ -7,6 +7,33 @@ const LEVELS = {
   insane: {speed: [840, 1040], warning: [0.25, 0.32], width: [38, 52], pause: [0.03, 0.06], continuous: true, dualChance: 0.50, ringChance: 0.35, chainChance: 0.72}
 };
 
+function drawRingRule(ctx, amber) {
+  const cx = WIDTH / 2;
+  const cy = HEIGHT / 2 - 33;
+  ctx.globalAlpha = 1;
+  ctx.setLineDash([]);
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  if (amber) {
+    for (const offset of [-5, 3]) {
+      ctx.moveTo(cx + offset - 3, cy - 5);
+      ctx.lineTo(cx + offset + 3, cy);
+      ctx.lineTo(cx + offset - 3, cy + 5);
+    }
+  } else {
+    for (const offset of [-3, 3]) {
+      ctx.moveTo(cx + offset, cy - 5);
+      ctx.lineTo(cx + offset, cy + 5);
+    }
+  }
+  ctx.strokeStyle = "#0b0912";
+  ctx.lineWidth = 6;
+  ctx.stroke();
+  ctx.strokeStyle = "#fff";
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+}
+
 export class ResonanceGame extends ArenaGame {
   constructor(session, onEvent) {
     super(session, onEvent);
@@ -122,6 +149,7 @@ export class ResonanceGame extends ArenaGame {
       ctx.save();
 
       if (wave.kind === "ring") {
+        const radius = this.position(wave, time);
         if (warning) {
           const pulseAlpha = 0.55 + 0.4 * Math.sin(time * 18) ** 2;
           ctx.strokeStyle = color;
@@ -132,14 +160,13 @@ export class ResonanceGame extends ArenaGame {
           ctx.stroke();
           ctx.lineWidth = 4;
           ctx.globalAlpha = pulseAlpha;
-          ctx.setLineDash([7, 5]);
+          if (!wave.amber) ctx.setLineDash([7, 5]);
           ctx.stroke();
         } else {
-          const r = this.position(wave, time);
-          if (r > 0) {
+          if (radius > 0) {
             ctx.strokeStyle = color;
             ctx.beginPath();
-            ctx.arc(WIDTH / 2, HEIGHT / 2, r, 0, Math.PI * 2);
+            ctx.arc(WIDTH / 2, HEIGHT / 2, radius, 0, Math.PI * 2);
             ctx.lineWidth = wave.width + 14;
             ctx.globalAlpha = 0.14;
             ctx.stroke();
@@ -154,7 +181,7 @@ export class ResonanceGame extends ArenaGame {
             if (!wave.amber) ctx.setLineDash([6, 8]);
             ctx.stroke();
           } else {
-            const pulseR = Math.max(SOUL_RADIUS, r + wave.width * 0.5);
+            const pulseR = Math.max(SOUL_RADIUS, radius + wave.width * 0.5);
             ctx.fillStyle = color;
             ctx.globalAlpha = 0.22;
             ctx.beginPath();
@@ -166,6 +193,7 @@ export class ResonanceGame extends ArenaGame {
             ctx.fill();
           }
         }
+        if (warning || radius < 22) drawRingRule(ctx, wave.amber);
         ctx.restore();
         continue;
       }
@@ -186,7 +214,7 @@ export class ResonanceGame extends ArenaGame {
       if (warning) {
         ctx.strokeStyle = color;
         ctx.lineWidth = 2;
-        ctx.setLineDash([10, 6]);
+        if (!wave.amber) ctx.setLineDash([10, 6]);
         ctx.beginPath();
         if (wave.vertical) { ctx.moveTo(center, 0); ctx.lineTo(center, HEIGHT); }
         else { ctx.moveTo(0, center); ctx.lineTo(WIDTH, center); }

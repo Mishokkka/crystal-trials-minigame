@@ -98,7 +98,7 @@ export class TrialOverlay {
         timeLow: null,
         statusKey: null
       };
-      slot.game = new GAMES[session.gameType].Game(session, event => this.handleSlotEvent(slot, event));
+      slot.game = new GAMES[session.gameType].Game(session, (event, timingStrike) => this.handleSlotEvent(slot, event, timingStrike));
       slot.view = {...slot.game.state};
       if (session.gameType === "maze") slot.localTrail = [slot.game.origin];
       return slot;
@@ -357,6 +357,9 @@ export class TrialOverlay {
     if (!active || active.result || this.finished) return;
     if (down && (event.repeat || this.keys.has(event.code))) return;
 
+    this.advance(this.getNow());
+    if (active.result || this.finished) return;
+
     const alreadyJumping = this.held(JUMP);
     if (down) this.keys.add(event.code);
     else this.keys.delete(event.code);
@@ -368,18 +371,12 @@ export class TrialOverlay {
       this.shieldDir = this.held(UP) ? 0 : this.held(RIGHT) ? 1 : this.held(DOWN) ? 2 : this.held(LEFT) ? 3 : -1;
     }
 
-    this.advance(this.getNow());
-    if (!this.started || active.result || this.finished) return;
+    if (!this.started) return;
     if (down) {
       const gt = this.session.gameType;
       if (event.code === "Space" && gt === "timing") this.press("timing");
       if (JUMP.includes(event.code) && !alreadyJumping && gt === "gravity") this.press("jump");
-      if (gt === "shield" || gt === "sigil") {
-        if (UP.includes(event.code)) this.press("dir0");
-        else if (RIGHT.includes(event.code)) this.press("dir1");
-        else if (DOWN.includes(event.code)) this.press("dir2");
-        else if (LEFT.includes(event.code)) this.press("dir3");
-      }
+      if (dir >= 0 && (gt === "shield" || gt === "sigil")) this.press(`dir${dir}`);
     }
   }
 
@@ -516,12 +513,12 @@ export class TrialOverlay {
     }
   }
 
-  handleSlotEvent(slot, event) {
+  handleSlotEvent(slot, event, timingStrike) {
     if (event !== "finish") {
       const {x, y, vx, vy} = slot.game.state;
       this.reactSlot(slot, event, {x, y, vx, vy});
     }
-    this.sendState(slot, event);
+    this.sendState(slot, event, timingStrike);
   }
 
   spawnParticles(slot, x, y, color, count, speed, ring = false, baseAngle = 0, spread = Math.PI * 2) {
@@ -574,17 +571,19 @@ export class TrialOverlay {
     }
   }
 
-  sendState(slot, event) {
+  sendState(slot, event, timingStrike) {
     const now = performance.now();
     if (!slot.active || (!event && now - slot.lastSend < SEND_INTERVAL)) return;
     slot.lastSend = now;
-    const {x, y, vx, vy, moving, lives, progress, activeStarted, invulnerableUntil, tracking, attemptsMask} = slot.game.state;
+    const {x, y, vx, vy, moving, lives, progress, activeStarted, invulnerableUntil, tracking, attemptsMask, aimStruck, aimCracked} = slot.game.state;
     const payload = {
       seq: ++slot.sequence,
       t: clamp(this.simulated, 0, this.session.durationSec),
       x, y, vx, vy, moving, lives, progress, activeStarted, invulnerableUntil, tracking
     };
     if (attemptsMask !== undefined) payload.attemptsMask = attemptsMask;
+    if (aimStruck !== undefined) Object.assign(payload, {aimStruck, aimCracked});
+    if (timingStrike !== undefined) payload.timingStrike = timingStrike;
     if (event !== undefined) payload.event = event;
     this.publishState(slot.userId, payload);
   }
@@ -630,10 +629,9 @@ export class TrialOverlay {
     for (const snap of slot.snapshots) {
       if (!snap.reacted && (slot.renderTime >= snap.t || slot.result)) {
         snap.reacted = true;
-        if (this.session.gameType === "aim" && (snap.event === "timingHit" || snap.event === "hit")) {
-          slot.game.syncSpectatorStrike?.(snap.x, snap.y, snap.t, snap.event);
-        } else if (this.session.gameType === "timing" && (snap.event === "timingHit" || snap.event === "hit")) {
-          slot.game.syncSpectatorStrike?.(snap.t, snap.event);
+        if (this.session.gameType === "aim") slot.game.syncSpectatorTargets(snap, snap.t);
+        if (this.session.gameType === "timing" && snap.timingStrike) {
+          slot.game.showStrike(snap.timingStrike, snap.t);
         }
         if (snap.event) this.reactSlot(slot, snap.event, {x: snap.x, y: snap.y, vx: snap.vx, vy: snap.vy});
       }

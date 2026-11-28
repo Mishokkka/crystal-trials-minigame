@@ -24,19 +24,19 @@ function hitsStalactite(px, py, col, tipY, surfDir, r) {
 
 const LEVELS = {
   easy: {
-    moveSpeed: 215, warning: 0.56, speed: [228, 260], interval: [1.12, 1.30],
+    moveSpeed: 215, warning: 0.56, speed: [228, 260], interval: [0.86, 1.03],
     heights: [27, 48], maxChain: 3, gateChance: 0, stalChance: 0.29, lavaCount: 0, flipCount: 0
   },
   medium: {
-    moveSpeed: 230, warning: 0.48, speed: [270, 320], interval: [0.87, 1.07],
+    moveSpeed: 230, warning: 0.48, speed: [270, 320], interval: [0.72, 0.88],
     heights: [31, 57], maxChain: 3, gateChance: 0.30, stalChance: 0.34, lavaSpeed: [242, 275], lavaCount: 1, flipCount: 0
   },
   hard: {
-    moveSpeed: 252, warning: 0.42, speed: [345, 420], interval: [0.73, 0.91],
+    moveSpeed: 252, warning: 0.42, speed: [345, 420], interval: [0.60, 0.76],
     heights: [35, 66], maxChain: 4, gateChance: 0.37, stalChance: 0.38, lavaSpeed: [270, 300], lavaCount: 1, flipCount: 1
   },
   insane: {
-    moveSpeed: 272, warning: 0.37, speed: [400, 485], interval: [0.65, 0.79],
+    moveSpeed: 272, warning: 0.37, speed: [400, 485], interval: [0.52, 0.66],
     heights: [39, 73], maxChain: 5, gateChance: 0.42, stalChance: 0.42, lavaSpeed: [298, 338], lavaCount: 2, flipCount: 2
   }
 };
@@ -174,6 +174,7 @@ export class GravityGame extends ArenaGame {
 
   buildGauntlet() {
     const {warning, speed: speedRange, interval, heights, maxChain, gateChance, stalChance, lavaCount} = this.cfg;
+    const layerDrop = this.difficulty !== "easy";
     const minImpact = warning + 0.08 + WIDTH / 2 / speedRange[0];
     let impact = Math.max(1.18, minImpact);
     let prevDirection = this.direction;
@@ -201,7 +202,8 @@ export class GravityGame extends ArenaGame {
       }
 
       // Falling stalactites targeting center + side, guaranteeing >=124px continuous safe corridor
-      if (!nearFlip && this.random() < stalChance) {
+      const drop = !nearFlip && this.random() < stalChance;
+      if (drop && !layerDrop) {
         const start = Math.max(earliestStart, warning + 0.65, impact - 0.35);
         this.addStalactites(start, surfDir, routeX);
         impact += this.between(...interval) * 0.9;
@@ -248,6 +250,10 @@ export class GravityGame extends ArenaGame {
       const isGate = rows[0].kind === "gate";
       const jumpLead = isGate ? 0.275 : 0.367;
       const crossing = this.placeCrossing(rows, Math.max(impact, jumpLandsBy + jumpLead), routeX, earliestStart);
+      if (drop && layerDrop && crossing < this.duration - 0.45 && !this.nearFlipTransition(crossing)) {
+        const start = Math.max(earliestStart, warning + 0.65, crossing - 0.35);
+        this.addStalactites(start, this.surfaceAt(crossing).dir, routeX);
+      }
       jumpLandsBy = crossing + (isGate ? 0.29 : this.insane ? 0.325 : 0.38);
       impact = crossing + this.between(...interval);
     }

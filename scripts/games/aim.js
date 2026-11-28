@@ -36,6 +36,8 @@ export class AimGame extends ArenaGame {
     this.rules = AIM_RULES[session.difficulty];
     this.targets = [];
     this.pops = [];
+    this.state.aimStruck = 0;
+    this.state.aimCracked = 0;
     this.buildTargets();
   }
 
@@ -215,7 +217,7 @@ export class AimGame extends ArenaGame {
       const d = Math.hypot(point.x - pos.x, point.y - pos.y);
       if (d <= rad + pad && d < bestDist) {
         bestDist = d;
-        best = {target: t, pos};
+        best = t;
       }
     }
     return best;
@@ -227,19 +229,10 @@ export class AimGame extends ArenaGame {
     this.state.y = point.y;
 
     // Prioritize valid golden seals before decoys so overlapping rings feel fair
-    const sealHit = this.findHitTarget(point, time, false, 6);
-    if (sealHit) {
-      const {target, pos} = sealHit;
-      target.hp = Math.max(0, target.hp - 1);
-      if (target.hp > 0) {
-        this.pops.push({x: pos.x, y: pos.y, time, color: PALETTE.cyan, kind: "crack"});
-        this.onEvent("timingHit");
-        return;
-      }
-      target.struck = true;
-      target.resolved = true;
-      this.pops.push({x: pos.x, y: pos.y, time, color: PALETTE.gold, kind: "hit"});
-      this.state.progress++;
+    const seal = this.findHitTarget(point, time, false, 6);
+    if (seal) {
+      this.applyTargetHit(seal, seal.hp - 1, time);
+      if (seal.struck) this.state.progress++;
       this.onEvent("timingHit");
       if (this.state.progress >= this.rules.required) {
         this.finish(true, "aim", time);
@@ -247,37 +240,36 @@ export class AimGame extends ArenaGame {
       return;
     }
 
-    const decoyHit = this.findHitTarget(point, time, true, 4);
-    if (!decoyHit) return;
-    const {target, pos} = decoyHit;
-    target.struck = true;
-    target.resolved = true;
-    this.pops.push({x: pos.x, y: pos.y, time, color: PALETTE.crimson, kind: "decoy"});
+    const decoy = this.findHitTarget(point, time, true, 4);
+    if (!decoy) return;
+    this.applyTargetHit(decoy, 0, time);
+    this.onEvent("aimStrike");
     this.damage(time, 0.30);
   }
 
-  syncSpectatorStrike(x, y, time, event = "timingHit") {
-    const isDecoy = event === "hit";
-    let best = null;
-    let bestDist = Infinity;
-    for (const t of this.targets) {
-      if (Boolean(t.decoy) !== isDecoy || t.struck || time < t.spawn - 0.18 || time > t.end + 0.18) continue;
-      const pos = this.posAt(t, clamp(time, t.spawn, t.end));
-      const d = Math.hypot(x - pos.x, y - pos.y);
-      if (d <= this.rules.radius + (isDecoy ? 16 : 36) && d < bestDist) {
-        bestDist = d;
-        best = t;
-      }
+  applyTargetHit(target, hp, time) {
+    const bit = 1 << target.id;
+    target.hp = hp;
+    if (hp === 0) {
+      target.struck = target.resolved = true;
+      this.state.aimStruck |= bit;
+      this.state.aimCracked &= ~bit;
+    } else {
+      this.state.aimCracked |= bit;
     }
-    if (!best) return;
-    if (isDecoy) {
-      best.struck = true;
-      this.pops.push({x, y, time, color: PALETTE.crimson, kind: "decoy"});
-      return;
+    const pos = this.posAt(target, clamp(time, target.spawn, target.end));
+    const color = target.decoy ? PALETTE.crimson : hp === 0 ? PALETTE.gold : PALETTE.cyan;
+    const kind = target.decoy ? "decoy" : hp === 0 ? "hit" : "crack";
+    this.pops.push({...pos, time, color, kind});
+  }
+
+  syncSpectatorTargets({aimStruck, aimCracked}, time) {
+    if (aimStruck === this.state.aimStruck && aimCracked === this.state.aimCracked) return;
+    for (const target of this.targets) {
+      const bit = 1 << target.id;
+      const hp = (aimStruck & bit) ? 0 : (aimCracked & bit) ? 1 : target.maxHp;
+      if (hp < target.hp) this.applyTargetHit(target, hp, time);
     }
-    best.hp = Math.max(0, best.hp - 1);
-    if (best.hp === 0) best.struck = true;
-    this.pops.push({x, y, time, color: best.hp === 0 ? PALETTE.gold : PALETTE.cyan, kind: best.hp === 0 ? "hit" : "crack"});
   }
 
   update(dt, time) {

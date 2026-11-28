@@ -35,7 +35,6 @@ const DUPLICATE_COOLDOWN_MS = 28;
 const decodedBuffers = new Map();
 const loadingBuffers = new Map();
 const failedBuffers = new Set();
-const interfaceGains = new Map();
 
 export function registerSoundSettings(onChange) {
   game.settings.register(MODULE_ID, "masterVolume", {
@@ -73,8 +72,7 @@ function clampVolume(value) {
 }
 
 function audioContext() {
-  const iface = game.audio?.interface;
-  const ctx = (iface && typeof iface.createBufferSource === "function") ? iface : game.audio?.context;
+  const ctx = game.audio?.interface;
   return ctx && ctx.state !== "closed" ? ctx : null;
 }
 
@@ -83,37 +81,6 @@ function resolveSrc(src) {
     return foundry?.utils?.getRoute?.(src) ?? src;
   } catch {
     return src;
-  }
-}
-
-function interfaceVolume() {
-  try {
-    const value = game.settings.get("core", "globalInterfaceVolume");
-    return Number.isFinite(value) ? clampVolume(value) : 1;
-  } catch {
-    return 1;
-  }
-}
-
-function getInterfaceOutput(ctx) {
-  let node = interfaceGains.get(ctx);
-  if (!node && typeof ctx?.createGain === "function") {
-    node = ctx.createGain();
-    node.gain.value = interfaceVolume();
-    node.connect(ctx.destination);
-    interfaceGains.set(ctx, node);
-  }
-  return node ?? ctx.destination;
-}
-
-export function syncInterfaceVolume(volumeArg) {
-  const level = Number.isFinite(volumeArg) ? clampVolume(volumeArg) : interfaceVolume();
-  for (const [ctx, node] of interfaceGains) {
-    if (ctx.state === "closed") {
-      interfaceGains.delete(ctx);
-      continue;
-    }
-    node.gain.value = level;
   }
 }
 
@@ -210,15 +177,14 @@ export class SoundManager {
 
     const ctx = audioContext();
     const buffer = decodedBuffers.get(src);
-    if (ctx && ctx.state === "running" && buffer) {
+    if (ctx?.gainNode && ctx.state === "running" && buffer) {
       try {
         const source = ctx.createBufferSource();
         source.buffer = buffer;
         const gain = ctx.createGain();
-        gain.gain.value = clampVolume(level);
-        const dest = getInterfaceOutput(ctx);
+        gain.gain.value = level;
         source.connect(gain);
-        gain.connect(dest);
+        gain.connect(ctx.gainNode);
         if (!UNTRACKED.has(key)) {
           const effect = {source, gain, scale};
           this.effects.add(effect);
@@ -300,7 +266,6 @@ export class SoundManager {
       this.stopEffects();
     } else {
       void preloadSounds();
-      syncInterfaceVolume();
       for (const effect of this.effects) {
         const target = clampVolume(base * effect.scale);
         if (effect.gain) effect.gain.gain.value = target;

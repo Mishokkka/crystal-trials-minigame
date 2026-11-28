@@ -21,6 +21,12 @@ for (let x = 20; x <= WIDTH - 20; x += 22) {
 const SPAWN = {x: WIDTH / 2, y: HEIGHT / 2};
 const PROBES = [...EVAL_POINTS, SPAWN];
 
+function keyboardDistance(from, to) {
+  const dx = Math.abs(to.x - from.x);
+  const dy = Math.abs(to.y - from.y);
+  return Math.max(dx, dy) + (Math.SQRT2 - 1) * Math.min(dx, dy);
+}
+
 function beamHitsPoint(beam, time, px, py) {
   const angle = beam.angle + beam.spin * (time - beam.fire);
   const dist = Math.abs((px - beam.cx) * (-Math.sin(angle)) + (py - beam.cy) * Math.cos(angle));
@@ -81,6 +87,7 @@ export class BeamsGame extends ArenaGame {
     let prevSafe = [SPAWN];
     let prevEnd = 0;
     let fire = 0.72;
+    let volleyIndex = 0;
     while (fire < this.duration - 0.35) {
       const warn = this.between(...this.cfg.warning);
       const cue = Math.max(0.05, fire - warn);
@@ -89,9 +96,8 @@ export class BeamsGame extends ArenaGame {
       const preferScanner = this.cfg.spinChance > 0 && this.random() < this.cfg.spinChance;
       const departure = Math.max(prevEnd, cue + REACTION_SEC);
       const maxReach = this.cfg.moveSpeed * Math.max(0, fire - ARRIVAL_MARGIN - departure);
-      const reachSq = maxReach ** 2;
       const reachableProbes = PROBES.filter(probe => prevSafe.some(previous =>
-        (probe.x - previous.x) ** 2 + (probe.y - previous.y) ** 2 <= reachSq
+        keyboardDistance(previous, probe) <= maxReach
       ));
 
       const maxCheckEnd = Math.max(end, fire + 0.55);
@@ -114,9 +120,19 @@ export class BeamsGame extends ArenaGame {
         return {beams, checkEnd, safeProbes, score};
       };
 
-      for (let attempt = 0; attempt < CANDIDATE_ATTEMPTS; attempt++) {
-        const candidate = evaluate(this.generateCandidate(cue, fire, end, prevSafe, preferScanner), best?.score);
-        if (candidate) best = candidate;
+      if (volleyIndex % 3 === 1) {
+        const grid = volleyIndex % 6 === 4;
+        for (let attempt = 0; attempt < CANDIDATE_ATTEMPTS; attempt++) {
+          const candidate = evaluate(this.generateOrthogonal(cue, fire, end, prevSafe, grid), best?.score);
+          if (candidate) best = candidate;
+        }
+      }
+
+      if (!best) {
+        for (let attempt = 0; attempt < CANDIDATE_ATTEMPTS; attempt++) {
+          const candidate = evaluate(this.generateCandidate(cue, fire, end, prevSafe, preferScanner), best?.score);
+          if (candidate) best = candidate;
+        }
       }
 
       best ??= this.buildFallback(cue, fire, end, prevSafe[0], evaluate);
@@ -125,6 +141,7 @@ export class BeamsGame extends ArenaGame {
       prevSafe = best.safeProbes;
       prevEnd = best.checkEnd;
       fire += this.between(...this.cfg.step);
+      volleyIndex++;
     }
   }
 
@@ -160,6 +177,29 @@ export class BeamsGame extends ArenaGame {
       best = evaluate([...best.beams, rail]) ?? best;
     }
     return best;
+  }
+
+  generateOrthogonal(cue, fire, end, prevSafe, grid) {
+    const anchor = prevSafe[Math.floor(this.random() * prevSafe.length)];
+    const width = this.between(...this.cfg.width) * (grid ? 0.78 : 1);
+    const spacing = Math.max(this.between(...this.cfg.spacing) * (grid ? 1.65 : 1), width + 2 * SOUL_RADIUS + 22);
+    const beams = [];
+    const horizontal = this.random() < 0.5;
+    const addBank = isHorizontal => {
+      const inset = 18;
+      const extent = isHorizontal ? HEIGHT : WIDTH;
+      const center = isHorizontal ? anchor.y : anchor.x;
+      const offset = center - inset + this.between(-spacing / 4, spacing / 4);
+      const first = inset + ((offset % spacing) + spacing) % spacing;
+      for (let pos = first; pos <= extent - inset; pos += spacing) {
+        const cx = isHorizontal ? anchor.x : pos;
+        const cy = isHorizontal ? pos : anchor.y;
+        beams.push({cue, fire, end, cx, cy, angle: isHorizontal ? 0 : Math.PI / 2, spin: 0, width});
+      }
+    };
+    addBank(horizontal);
+    if (grid) addBank(!horizontal);
+    return beams;
   }
 
   generateCandidate(cue, fire, end, prevSafe, preferScanner) {

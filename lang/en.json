@@ -38,11 +38,11 @@
       "resonance": {
         "Name": "Color Resonance",
         "Help": "WASD / arrow keys · follow the rules for line and ring waves",
-        "Teaser": "Blue — hold still · Amber — keep moving"
+        "Teaser": "Blue Ⅱ — hold still · Amber » — keep moving"
       },
       "beams": {
         "Name": "Resonator Beams",
-        "Help": "WASD / arrow keys · escape angled fans, crosses and sweeping beams",
+        "Help": "WASD / arrow keys · dodge beam rows, grids, angled fans and sweeps",
         "Teaser": "WASD / arrows · Keep moving to safe zones"
       },
       "gravity": {
@@ -95,9 +95,9 @@
       "SigilInvert": "⇄ Crimson rune — press opposite direction",
       "Lives": "Lives: {lives} of {max}",
       "Timer": "{seconds} s",
-      "Blue": "Blue — hold still",
-      "Amber": "Amber — keep moving",
-      "ResonanceHard": "Follow the color rule until the wave has passed through you",
+      "Blue": "Blue Ⅱ — hold still",
+      "Amber": "Amber » — keep moving",
+      "ResonanceHard": "Follow the wave's rule until it has passed through you",
       "MazeStart": "START",
       "MazeFinish": "FINISH",
       "GrabStart": "Hover over START or click it",
