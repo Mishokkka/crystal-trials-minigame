@@ -1,8 +1,8 @@
 {
   "id": "crystal-trials-minigame",
   "title": "Кристальные Испытания: Мини-игры",
-  "description": "Шесть коротких мини-игр для одного игрока с трансляцией для всего стола. Six short, system-independent minigames for one player and the whole table to watch.",
-  "version": "1.1.0",
+  "description": "Десять коротких мини-игр для 1–2 игроков с трансляцией для всего стола. Ten short, system-independent minigames for 1–2 players and the whole table to watch.",
+  "version": "1.2.0",
   "compatibility": {
     "minimum": "13",
     "verified": "13.351"

@@ -1,23 +1,43 @@
 import {ArenaGame, HEIGHT, PALETTE, SOUL_RADIUS, WIDTH, clamp, drawSoul} from "./base.js";
 
 const FLOOR = 315;
+const CEILING = 45;
 const GROUND = FLOOR - 10;
+const CEIL_GROUND = CEILING + 10;
+const PLAT_OFFSET = 52;
+const STAL_HEIGHT = 58;
+const LAVA_LEAD = 0.38;
+const LAVA_TAIL = 14;
+const LAVA_RECOVERY = 0.30;
+const FLIP_SETTLE = 0.67;
+
+function hitsStalactite(px, py, col, tipY, surfDir, r) {
+  const hw = col.w / 2;
+  const dx = Math.abs(px - (col.x + hw));
+  const dy = surfDir === 1 ? tipY - py : py - tipY;
+  if (dy >= 0 && dy <= STAL_HEIGHT && dx <= hw * (dy / STAL_HEIGHT)) return true;
+  const lenSq = hw * hw + STAL_HEIGHT * STAL_HEIGHT;
+  const t = clamp((dx * hw + dy * STAL_HEIGHT) / lenSq, 0, 1);
+  if ((dx - t * hw) ** 2 + (dy - t * STAL_HEIGHT) ** 2 < r * r) return true;
+  return Math.max(0, dx - hw) ** 2 + (dy - STAL_HEIGHT) ** 2 < r * r;
+}
+
 const LEVELS = {
   easy: {
-    moveSpeed: 205, warning: 0.56, speed: [185, 205], interval: [1.55, 1.75],
-    heights: [22, 38], maxChain: 2, aerialChance: 0, pairedChance: 0
+    moveSpeed: 215, warning: 0.56, speed: [228, 260], interval: [0.86, 1.03],
+    heights: [27, 48], maxChain: 3, gateChance: 0, stalChance: 0.29, lavaCount: 0, flipCount: 0
   },
   medium: {
-    moveSpeed: 222, warning: 0.48, speed: [225, 265], interval: [1.18, 1.42],
-    heights: [26, 50], maxChain: 3, aerialChance: 0.22, pairedChance: 0.18
+    moveSpeed: 230, warning: 0.48, speed: [270, 320], interval: [0.72, 0.88],
+    heights: [31, 57], maxChain: 3, gateChance: 0.30, stalChance: 0.34, lavaSpeed: [242, 275], lavaCount: 1, flipCount: 0
   },
   hard: {
-    moveSpeed: 244, warning: 0.42, speed: [300, 385], interval: [0.88, 1.08],
-    heights: [30, 64], maxChain: 3, aerialChance: 0.30, pairedChance: 0.35
+    moveSpeed: 252, warning: 0.42, speed: [345, 420], interval: [0.60, 0.76],
+    heights: [35, 66], maxChain: 4, gateChance: 0.37, stalChance: 0.38, lavaSpeed: [270, 300], lavaCount: 1, flipCount: 1
   },
   insane: {
-    moveSpeed: 266, warning: 0.38, speed: [350, 445], interval: [0.72, 0.90],
-    heights: [34, 68], maxChain: 4, aerialChance: 0.34, pairedChance: 0.45
+    moveSpeed: 272, warning: 0.37, speed: [400, 485], interval: [0.52, 0.66],
+    heights: [39, 73], maxChain: 5, gateChance: 0.42, stalChance: 0.42, lavaSpeed: [298, 338], lavaCount: 2, flipCount: 2
   }
 };
 
@@ -29,56 +49,213 @@ export class GravityGame extends ArenaGame {
     this.jumpAt = -1;
     this.jumpUntil = -1;
     this.rows = [];
+    this.flips = [];
+    this.buildFlips();
     this.buildGauntlet();
+    for (const flip of this.flips) {
+      flip.cueStart = flip.start - 0.65;
+      flip.cueEnd = flip.end - 0.55;
+      this.cues.push({time: flip.cueStart, sound: "Telegraph"}, {time: flip.cueEnd, sound: "Telegraph"});
+    }
+    this.cues.sort((a, b) => a.time - b.time);
+  }
+
+  buildFlips() {
+    if (!this.cfg.flipCount) return;
+    if (this.hard && this.random() >= 0.6) return;
+    const f1Start = this.between(3.2, 4.3);
+    const f1End = Math.min(this.duration - 2.0, f1Start + this.between(3.3, 3.7));
+    this.flips.push({start: f1Start, end: f1End});
+
+    if (this.cfg.flipCount >= 2 && f1End + 4.8 < this.duration && this.random() < 0.7) {
+      const f2Start = f1End + this.between(1.6, 2.0);
+      const f2End = Math.min(this.duration - 1.1, f2Start + this.between(3.2, 3.6));
+      this.flips.push({start: f2Start, end: f2End});
+    }
+  }
+
+  surfaceAt(time) {
+    const flipped = this.flips.some(f => time >= f.start && time < f.end);
+    return flipped
+      ? {dir: -1, surfaceY: CEILING, groundY: CEIL_GROUND}
+      : {dir: 1, surfaceY: FLOOR, groundY: GROUND};
+  }
+
+  nearFlipTransition(time) {
+    return this.flips.some(f =>
+      Math.abs(time - f.start) < 0.85 || Math.abs(time - f.end) < 0.85
+    );
+  }
+
+  rowWidth(row) {
+    return row.kind === "gate" ? row.width : row.sizes.reduce((span, spike) => span + spike.width + 3, -3);
+  }
+
+  rowEnd(row) {
+    if (row.kind === "stalactite") return row.start + (FLOOR - CEILING + STAL_HEIGHT) / row.speed;
+    if (row.kind === "lava") return row.start + (WIDTH + row.surgeLen + LAVA_TAIL) / row.speed;
+    return row.start + (WIDTH + this.rowWidth(row)) / row.speed;
+  }
+
+  placeCrossing(rows, impact, routeX, earliestStart) {
+    const leadTimes = rows.map(row => {
+      const distance = row.direction === 1 ? routeX : WIDTH - routeX;
+      return (distance + this.rowWidth(row) / 2) / row.speed;
+    });
+    impact = Math.max(impact, earliestStart + Math.max(...leadTimes));
+    for (const {start, end} of this.flips) {
+      for (const transition of [start, end]) {
+        if (impact > transition - 0.37 && impact < transition + FLIP_SETTLE + 0.37) {
+          const dropStart = Math.max(earliestStart, transition - 0.17);
+          if (this.insane && dropStart < this.duration - 0.75) {
+            this.addStalactites(dropStart, this.surfaceAt(transition).dir, routeX);
+          }
+          impact = transition + FLIP_SETTLE + 0.37;
+        }
+      }
+    }
+    if (impact < this.duration - 0.45) {
+      const {dir: surfDir} = this.surfaceAt(impact);
+      this.rows.push(...rows.map((row, index) => ({...row, surfDir, start: impact - leadTimes[index]})));
+    }
+    return impact;
+  }
+
+  buildLava(impact, direction, surfDir, earliestStart = this.cfg.warning + 0.05) {
+    const {warning} = this.cfg;
+    const speed = this.between(...this.cfg.lavaSpeed);
+    const surgeLen = this.between(330, 420);
+    const transitions = this.flips.flatMap(({start, end}) => [start, end]);
+    const lastFlip = transitions.filter(time => time <= impact).at(-1) ?? -Infinity;
+    const nextFlip = transitions.find(time => time > impact) ?? Infinity;
+    const clearTime = this.rows.reduce((latest, row) => Math.max(latest, this.rowEnd(row)), 0);
+    const platStart = Math.max(earliestStart, impact - WIDTH / 2 / speed - LAVA_LEAD,
+      clearTime + 0.22, lastFlip + FLIP_SETTLE);
+    if (platStart >= nextFlip) return null;
+
+    const row = {kind: "lava", start: platStart + LAVA_LEAD, platStart, direction, speed,
+      platW: surgeLen + speed * LAVA_LEAD + LAVA_TAIL, surgeLen, surgeH: 30, surfDir};
+    const deckEnd = this.rowEnd(row);
+    if (deckEnd + LAVA_RECOVERY > this.duration) return null;
+    const flipAfter = deckEnd + (surfDir === -1 ? 0.55 : 0.65);
+    const delay = flipAfter - nextFlip;
+    if (delay > 0) {
+      const activeOrFirst = surfDir === -1 || nextFlip === this.flips[0].start;
+      if (activeOrFirst && flipAfter + (surfDir === -1 ? FLIP_SETTLE : 2 * FLIP_SETTLE) > this.duration) return null;
+      this.flips = this.flips.map(flip => flip.end <= impact ? flip : {
+        start: flip.start <= impact ? flip.start : flip.start + delay,
+        end: Math.min(flip.end + delay, this.duration - FLIP_SETTLE)
+      }).filter(flip => flip.end - flip.start >= FLIP_SETTLE);
+    }
+    this.cues.push({time: Math.min(platStart, row.start - warning), sound: "Telegraph"});
+    return row;
+  }
+
+  addStalactites(start, surfDir, routeX) {
+    const previous = this.rows.findLast(row => row.kind === "stalactite");
+    if (previous) start = Math.max(start, this.rowEnd(previous));
+    if (start >= this.duration - 0.75) return;
+    const dropWarn = Math.max(0.56, this.cfg.warning + 0.20);
+    const dropSpeed = this.between(540, 680);
+    const safeCenter = routeX + this.between(-46, 46);
+    const safeLeft = safeCenter - 62;
+    const safeRight = safeCenter + 62;
+    const cols = [];
+    const leftW = this.between(34, 42);
+    if (safeLeft - leftW >= 24) cols.push({x: this.between(24, safeLeft - leftW), w: leftW});
+    const centerW = 40;
+    const centerX = WIDTH / 2 - centerW / 2 + this.between(-18, 18);
+    if (centerX + centerW <= safeLeft || centerX >= safeRight) cols.push({x: centerX, w: centerW});
+    const rightW = this.between(34, 42);
+    if (safeRight + rightW <= WIDTH - 24) cols.push({x: this.between(safeRight, WIDTH - 24 - rightW), w: rightW});
+    this.rows.push({kind: "stalactite", start, cue: start - dropWarn, speed: dropSpeed, cols, surfDir});
+    this.cues.push({time: Math.max(0.05, start - dropWarn), sound: "Telegraph"});
   }
 
   buildGauntlet() {
-    const {warning, speed: speedRange, interval, heights, maxChain, aerialChance, pairedChance} = this.cfg;
+    const {warning, speed: speedRange, interval, heights, maxChain, gateChance, stalChance, lavaCount} = this.cfg;
+    const layerDrop = this.difficulty !== "easy";
     const minImpact = warning + 0.08 + WIDTH / 2 / speedRange[0];
-    let impact = Math.max(1.20, minImpact);
+    let impact = Math.max(1.18, minImpact);
     let prevDirection = this.direction;
+    const routeX = WIDTH / 2 + this.direction * this.between(62, 90);
+    let earliestStart = warning + 0.05;
+    let jumpLandsBy = 0;
+    let lavasPlaced = 0;
 
-    while (impact < this.duration - 0.38) {
-      const direction = this.random() < 0.72 ? -prevDirection : prevDirection;
+    while (impact < this.duration - 0.45) {
+      const {dir: surfDir} = this.surfaceAt(impact);
+      const nearFlip = this.nearFlipTransition(impact);
+      const direction = this.random() < 0.7 ? -prevDirection : prevDirection;
       prevDirection = direction;
-      const isAerial = this.random() < aerialChance;
-      const paired = !isAerial && this.random() < pairedChance;
-      const directions = paired ? [direction, -direction] : [direction];
 
-      for (const side of directions) {
-        const speed = this.between(...speedRange);
-        const stagger = side === direction ? 0 : this.between(-0.03, 0.035);
-        const minStart = warning + 0.05;
-        const start = Math.max(minStart, impact - WIDTH / 2 / speed + stagger);
-        if (start >= this.duration - 0.85) continue;
+      // Lava wave with rideable floating platform
+      if (lavasPlaced < lavaCount && !nearFlip && impact > 2.2 && impact < this.duration - 2.3 && this.random() < 0.35) {
+        const row = this.buildLava(impact, direction, surfDir, earliestStart);
+        if (row) {
+          this.rows.push(row);
+          lavasPlaced++;
+          earliestStart = this.rowEnd(row) + LAVA_RECOVERY;
+          impact = earliestStart + 0.35;
+          continue;
+        }
+      }
 
-        if (isAerial) {
-          this.rows.push({
-            kind: "aerial",
-            start,
-            direction: side,
-            speed,
-            width: this.between(46, 70),
-            bottom: this.between(45, 54),
-            thickness: this.between(18, 22)
-          });
-        } else {
-          const capCount = paired ? Math.min(2, maxChain) : maxChain;
-          const count = 1 + Math.floor(this.random() * capCount);
-          const maxChainWidth = speed * 0.32 - SOUL_RADIUS * 2;
-          const maxEachW = Math.max(16, Math.floor((maxChainWidth - (count - 1) * 3) / count));
-          const maxW = Math.min(count < 3 ? 29 : 23, maxEachW);
+      // Falling stalactites targeting center + side, guaranteeing >=124px continuous safe corridor
+      const drop = !nearFlip && this.random() < stalChance;
+      if (drop && !layerDrop) {
+        const start = Math.max(earliestStart, warning + 0.65, impact - 0.35);
+        this.addStalactites(start, surfDir, routeX);
+        impact += this.between(...interval) * 0.9;
+        continue;
+      }
+
+      const speed = this.between(...speedRange);
+      const rows = [];
+
+      // Gate: simultaneous low surface spike + upper floating prism requiring controlled jump height
+      if (!nearFlip && this.random() < gateChance) {
+        const spikeH = this.between(26, 36);
+        const gapH = this.between(54, 62);
+        rows.push({
+          kind: "gate",
+          direction,
+          speed,
+          width: this.between(36, 48),
+          spikeH,
+          prismBottom: spikeH + gapH,
+          prismThick: 18
+        });
+      } else {
+        const paired = !nearFlip && (this.hard || this.insane) && this.random() < (this.insane ? 0.52 : 0.40);
+        const dirs = paired ? [direction, -direction] : [direction];
+        for (const side of dirs) {
+          const sSpeed = side === direction ? speed : this.between(...speedRange);
+          const jumpWindow = this.insane ? 0.23 : this.hard ? 0.28 : 0.34;
+          const maxChainW = sSpeed * jumpWindow - SOUL_RADIUS * 2;
+          const cap = Math.min(paired && !this.insane ? 2 : maxChain, Math.floor((maxChainW + 3) / 19));
+          const minChain = this.insane ? Math.min(paired ? 2 : 3, cap) : 1;
+          const count = minChain + Math.floor(this.random() * (cap - minChain + 1));
+          const maxEachW = Math.floor((maxChainW - (count - 1) * 3) / count);
+          const maxW = Math.min(count < 3 ? 28 : 22, maxEachW);
           const minW = Math.min(17, maxW);
           const sizes = Array.from({length: count}, () => ({
             width: this.between(minW, maxW),
             height: this.between(...heights)
           }));
-          this.rows.push({kind: "floor", start, direction: side, speed, sizes});
+          rows.push({kind: "floor", direction: side, speed: sSpeed, sizes});
         }
       }
 
-      const step = this.between(...interval);
-      impact += isAerial ? Math.max(0.68, step * 0.85) : Math.max(0.74, step);
+      const isGate = rows[0].kind === "gate";
+      const jumpLead = isGate ? 0.275 : 0.367;
+      const crossing = this.placeCrossing(rows, Math.max(impact, jumpLandsBy + jumpLead), routeX, earliestStart);
+      if (drop && layerDrop && crossing < this.duration - 0.45 && !this.nearFlipTransition(crossing)) {
+        const start = Math.max(earliestStart, warning + 0.65, crossing - 0.35);
+        this.addStalactites(start, this.surfaceAt(crossing).dir, routeX);
+      }
+      jumpLandsBy = crossing + (isGate ? 0.29 : this.insane ? 0.325 : 0.38);
+      impact = crossing + this.between(...interval);
     }
   }
 
@@ -97,113 +274,289 @@ export class GravityGame extends ArenaGame {
     }
   }
 
-  aerialX(row, time) {
-    const travel = (time - row.start) * row.speed;
-    return row.direction === 1 ? travel - row.width : WIDTH - travel;
+  spanX(row, time, width, startOverride = row.start) {
+    const travel = (time - startOverride) * row.speed;
+    return row.direction === 1 ? travel - width : WIDTH - travel;
   }
 
   update(dt, time, input) {
     const state = this.state;
+    const {dir, surfaceY, groundY} = this.surfaceAt(time);
     const nextX = clamp(state.x + input.x * this.cfg.moveSpeed * dt, 14, WIDTH - 14);
     state.vx = (nextX - state.x) / dt;
     state.x = nextX;
-    if (state.y >= GROUND && time <= this.jumpUntil) {
-      state.vy = -402;
+
+    const prevY = state.y;
+    const fastFall = input.y > 0;
+
+    // Check active rideable platforms (from "lava" waves)
+    let platSurface = null;
+    if (!fastFall) {
+      for (const row of this.rows) {
+        if (row.kind !== "lava" || time < row.platStart || row.surfDir !== dir) continue;
+        const px = this.spanX(row, time, row.platW, row.platStart);
+        if (state.x + SOUL_RADIUS - 2 > px && state.x - SOUL_RADIUS + 2 < px + row.platW) {
+          const py = surfaceY - dir * PLAT_OFFSET;
+          if (dir === 1 && state.vy >= 0 && prevY + SOUL_RADIUS <= py + 6) {
+            platSurface = py - SOUL_RADIUS;
+          } else if (dir === -1 && state.vy <= 0 && prevY - SOUL_RADIUS >= py - 6) {
+            platSurface = py + SOUL_RADIUS;
+          }
+        }
+      }
+    }
+
+    const onMainSurface = dir === 1 ? state.y >= groundY - 0.5 : state.y <= groundY + 0.5;
+    const onPlatform = platSurface !== null && (dir === 1 ? state.y >= platSurface - 2 : state.y <= platSurface + 2);
+    if ((onMainSurface || onPlatform) && time <= this.jumpUntil) {
+      state.vy = -402 * dir;
       this.jumpAt = time;
       this.jumpUntil = -1;
       this.onEvent("jump");
     }
-    let gravity = 1460;
-    if (input.y > 0 && state.y < GROUND) gravity = 2950;
-    else if (input.jump && state.vy < 0 && time - this.jumpAt < 0.22) gravity = 810;
 
-    state.vy += gravity * dt;
+    let gravity = 1460;
+    const rising = dir === 1 ? state.vy < 0 : state.vy > 0;
+    if (fastFall && !onMainSurface) gravity = 2950;
+    else if (input.jump && rising && time - this.jumpAt < 0.22) gravity = 810;
+
+    state.vy += gravity * dir * dt;
     state.y += state.vy * dt;
-    if (state.y >= GROUND) {
-      state.y = GROUND;
+
+    if (platSurface !== null && !fastFall && ((dir === 1 && state.vy >= 0 && state.y >= platSurface) || (dir === -1 && state.vy <= 0 && state.y <= platSurface))) {
+      state.y = platSurface;
+      state.vy = 0;
+    }
+    if (state.y >= GROUND || state.y <= CEIL_GROUND) {
+      state.y = clamp(state.y, CEIL_GROUND, GROUND);
       state.vy = 0;
     }
     state.moving = Math.hypot(state.vx, state.vy) > 12;
 
     for (const row of this.rows) {
+      if (row.kind === "stalactite") {
+        if (time < row.start) continue;
+        const travel = (time - row.start) * row.speed;
+        const span = FLOOR - CEILING;
+        if (travel > span + 80) continue;
+        const tipY = row.surfDir === 1 ? CEILING + travel : FLOOR - travel;
+        const tailY = row.surfDir === 1 ? tipY - STAL_HEIGHT : tipY + STAL_HEIGHT;
+        const yTop = Math.min(tipY, tailY);
+        const yBot = Math.max(tipY, tailY);
+        const hitR = SOUL_RADIUS - 2;
+        if (state.y + hitR > yTop && state.y - hitR < yBot) {
+          if (row.cols.some(c => hitsStalactite(state.x, state.y, c, tipY, row.surfDir, hitR))) {
+            this.damage(time);
+          }
+        }
+        continue;
+      }
       if (time < row.start) continue;
-      if (row.kind === "aerial") {
-        const x = this.aerialX(row, time);
-        if (x <= -row.width || x >= WIDTH) continue;
-        const yBottom = FLOOR - row.bottom;
-        const yTop = yBottom - row.thickness;
-        if (state.y + SOUL_RADIUS - 2 > yTop && state.y - SOUL_RADIUS + 2 < yBottom
-          && state.x + SOUL_RADIUS - 2 > x && state.x - SOUL_RADIUS + 2 < x + row.width) {
+      const rSurf = row.surfDir === -1 ? CEILING : FLOOR;
+
+      if (row.kind === "lava") {
+        const sx = this.spanX(row, time, row.surgeLen);
+        if (sx <= -row.surgeLen || sx >= WIDTH) continue;
+        const hitY = row.surfDir === 1
+          ? state.y + SOUL_RADIUS - 2 > rSurf - row.surgeH
+          : state.y - SOUL_RADIUS + 2 < rSurf + row.surgeH;
+        if (hitY && state.x + SOUL_RADIUS - 2 > sx && state.x - SOUL_RADIUS + 2 < sx + row.surgeLen) {
           this.damage(time);
         }
         continue;
       }
+
+      if (row.kind === "gate") {
+        const gx = this.spanX(row, time, row.width);
+        if (gx <= -row.width || gx >= WIDTH) continue;
+        if (state.x + SOUL_RADIUS - 2 <= gx || state.x - SOUL_RADIUS + 2 >= gx + row.width) continue;
+        // Low spike check
+        const footDist = row.surfDir === 1 ? rSurf - (state.y + SOUL_RADIUS) : (state.y - SOUL_RADIUS) - rSurf;
+        if (footDist < row.spikeH) {
+          const halfW = (row.width / 2) * clamp((row.spikeH - footDist) / row.spikeH, 0, 1);
+          if (Math.abs(state.x - gx - row.width / 2) < halfW + SOUL_RADIUS - 2) this.damage(time);
+        }
+        // Upper prism check
+        const prismNear = rSurf - row.surfDir * row.prismBottom;
+        const prismFar = prismNear - row.surfDir * row.prismThick;
+        const yTop = Math.min(prismNear, prismFar);
+        const yBot = Math.max(prismNear, prismFar);
+        if (state.y + SOUL_RADIUS - 2 > yTop && state.y - SOUL_RADIUS + 2 < yBot) this.damage(time);
+        continue;
+      }
+
       this.forEachSpike(row, time, (x, {width, height}) => {
-        const foot = state.y + SOUL_RADIUS;
-        if (foot <= FLOOR - height) return;
-        const halfWidth = width * clamp((foot - FLOOR + height) / height, 0, 1) / 2;
+        const footDist = row.surfDir === 1 ? rSurf - (state.y + SOUL_RADIUS) : (state.y - SOUL_RADIUS) - rSurf;
+        if (footDist >= height) return;
+        const halfWidth = width * clamp((height - footDist) / height, 0, 1) / 2;
         if (Math.abs(state.x - x - width / 2) < halfWidth + SOUL_RADIUS - 2) this.damage(time);
       });
     }
   }
 
-  draw(ctx, time, state) {
-    const floorGlow = ctx.createLinearGradient(0, FLOOR, 0, HEIGHT);
-    floorGlow.addColorStop(0, "#8a3cd14f");
-    floorGlow.addColorStop(1, "#100b1d");
-    ctx.fillStyle = floorGlow;
+  drawSpike(ctx, x, width, height, surfY, surfDir) {
+    const tipY = surfY - surfDir * height;
+    ctx.fillStyle = "#ad5de9";
+    ctx.beginPath();
+    ctx.moveTo(x, surfY);
+    ctx.lineTo(x + width / 2, tipY);
+    ctx.lineTo(x + width, surfY);
+    ctx.fill();
+    ctx.fillStyle = this.insane ? PALETTE.insane : PALETTE.pink;
+    ctx.beginPath();
+    ctx.moveTo(x + width / 2, tipY);
+    ctx.lineTo(x + width * 0.68, surfY);
+    ctx.lineTo(x + width, surfY);
+    ctx.fill();
+  }
+
+  draw(ctx, time, state, labels) {
+    const {dir} = this.surfaceAt(time);
+    ctx.fillStyle = "#100b1d";
     ctx.fillRect(0, FLOOR, WIDTH, HEIGHT - FLOOR);
-    ctx.fillStyle = PALETTE.lilac;
+    ctx.fillStyle = dir === 1 ? "#8a3cd13d" : "#3b1d5a1c";
+    ctx.fillRect(0, FLOOR, WIDTH, 18);
+    ctx.fillStyle = dir === 1 ? "#8a3cd11f" : "#3b1d5a0e";
+    ctx.fillRect(0, FLOOR + 18, WIDTH, 14);
+    ctx.fillStyle = dir === 1 ? PALETTE.lilac : "#7c52a8";
     ctx.fillRect(0, FLOOR, WIDTH, 2);
+
+    if (this.flips.length) {
+      ctx.fillStyle = "#100b1d";
+      ctx.fillRect(0, 0, WIDTH, CEILING);
+      ctx.fillStyle = dir === -1 ? "#e879f93d" : "#3b1d5a1c";
+      ctx.fillRect(0, CEILING - 18, WIDTH, 18);
+      ctx.fillStyle = dir === -1 ? "#e879f91f" : "#3b1d5a0e";
+      ctx.fillRect(0, CEILING - 32, WIDTH, 14);
+      ctx.fillStyle = dir === -1 ? PALETTE.pink : "#7c52a8";
+      ctx.fillRect(0, CEILING - 2, WIDTH, 2);
+    }
+
+    // Gravity flip warning banner
+    const pendingFlip = this.flips.find(f => (time >= f.cueStart && time < f.start) || (time >= f.cueEnd && time < f.end));
+    if (pendingFlip) {
+      ctx.save();
+      ctx.globalAlpha = 0.55 + 0.45 * Math.sin(time * 24) ** 2;
+      ctx.fillStyle = PALETTE.gold;
+      ctx.font = "700 12px system-ui";
+      ctx.textAlign = "center";
+      const label = labels.gravFlip ?? "GRAVITY!";
+      ctx.fillText(time < pendingFlip.start ? `▲ ${label} ▲` : `▼ ${label} ▼`, WIDTH / 2, HEIGHT / 2 - 44);
+      ctx.restore();
+    }
 
     const warning = this.cfg.warning;
     for (const row of this.rows) {
+      if (row.kind === "stalactite") {
+        if (time < row.cue) continue;
+        const originY = row.surfDir === 1 ? CEILING : FLOOR;
+        if (time < row.start) {
+          ctx.save();
+          ctx.fillStyle = "#fb718544";
+          ctx.strokeStyle = PALETTE.crimson;
+          ctx.setLineDash([4, 4]);
+          for (const c of row.cols) {
+            ctx.fillRect(c.x, CEILING, c.w, FLOOR - CEILING);
+            ctx.strokeRect(c.x + 1, originY - (row.surfDir === 1 ? 0 : 12), c.w - 2, 12);
+          }
+          ctx.restore();
+          continue;
+        }
+        const travel = (time - row.start) * row.speed;
+        if (travel > FLOOR - CEILING + 80) continue;
+        const tipY = row.surfDir === 1 ? CEILING + travel : FLOOR - travel;
+        const tailY = row.surfDir === 1 ? tipY - 58 : tipY + 58;
+        for (const c of row.cols) {
+          ctx.fillStyle = "#be123c";
+          ctx.beginPath();
+          ctx.moveTo(c.x, tailY);
+          ctx.lineTo(c.x + c.w / 2, tipY);
+          ctx.lineTo(c.x + c.w, tailY);
+          ctx.closePath();
+          ctx.fill();
+          ctx.fillStyle = PALETTE.crimson;
+          ctx.beginPath();
+          ctx.moveTo(c.x + c.w / 2, tipY);
+          ctx.lineTo(c.x + c.w, tailY);
+          ctx.lineTo(c.x + c.w * 0.65, tailY);
+          ctx.closePath();
+          ctx.fill();
+        }
+        continue;
+      }
+
+      const rSurf = row.surfDir === -1 ? CEILING : FLOOR;
+      if (row.kind === "lava") {
+        if (time >= row.platStart) {
+          const px = this.spanX(row, time, row.platW, row.platStart);
+          if (px > -row.platW && px < WIDTH) {
+            const py = rSurf - row.surfDir * PLAT_OFFSET;
+            ctx.save();
+            ctx.fillStyle = PALETTE.mint;
+            ctx.globalAlpha = 0.24;
+            ctx.fillRect(px - 3, py - 6, row.platW + 6, 12);
+            ctx.globalAlpha = 1;
+            ctx.fillStyle = "#8ff3cbcc";
+            ctx.fillRect(px, py - 3, row.platW, 6);
+            ctx.restore();
+          }
+        }
+        if (time >= row.start - warning && time < row.start) {
+          const len = 8 + 20 * (1 - (row.start - time) / warning);
+          const wx = row.direction === 1 ? 8 : WIDTH - 8 - len;
+          ctx.fillStyle = PALETTE.crimson;
+          ctx.fillRect(wx, rSurf - (row.surfDir === 1 ? 8 : -2), len, 6);
+          continue;
+        }
+        if (time >= row.start) {
+          const sx = this.spanX(row, time, row.surgeLen);
+          if (sx > -row.surgeLen && sx < WIDTH) {
+            const sy = row.surfDir === 1 ? rSurf - row.surgeH : rSurf;
+            ctx.save();
+            ctx.fillStyle = "#e11d4899";
+            ctx.fillRect(sx, sy, row.surgeLen, row.surgeH);
+            ctx.fillStyle = "#fda4af";
+            for (let rx = sx + 12; rx < sx + row.surgeLen - 12; rx += 22) {
+              ctx.beginPath();
+              ctx.moveTo(rx - 9, rSurf);
+              ctx.lineTo(rx, rSurf - row.surfDir * row.surgeH);
+              ctx.lineTo(rx + 9, rSurf);
+              ctx.fill();
+            }
+            ctx.restore();
+          }
+        }
+        continue;
+      }
+
       if (time < row.start - warning) continue;
       if (time < row.start) {
         const progress = 1 - (row.start - time) / warning;
         const length = 6 + 21 * progress;
         const x = row.direction === 1 ? 8 : WIDTH - 8 - length;
-        if (row.kind === "aerial") {
-          const yBottom = FLOOR - row.bottom;
-          ctx.fillStyle = PALETTE.cyan;
-          ctx.fillRect(x, yBottom - row.thickness / 2 - 2, length, 4);
-        } else {
-          ctx.fillStyle = this.insane ? PALETTE.insane : "#f0abfc";
-          ctx.fillRect(x, FLOOR - 4, length, 4);
-        }
+        ctx.fillStyle = row.kind === "gate" ? PALETTE.cyan : (this.insane ? PALETTE.insane : "#f0abfc");
+        ctx.fillRect(x, rSurf - (row.surfDir === 1 ? 4 : 0), length, 4);
         continue;
       }
-      if (row.kind === "aerial") {
-        const x = this.aerialX(row, time);
-        if (x <= -row.width || x >= WIDTH) continue;
-        const yTop = FLOOR - row.bottom - row.thickness;
+
+      if (row.kind === "gate") {
+        const gx = this.spanX(row, time, row.width);
+        if (gx <= -row.width || gx >= WIDTH) continue;
+        this.drawSpike(ctx, gx, row.width, row.spikeH, rSurf, row.surfDir);
+        const prismNear = rSurf - row.surfDir * row.prismBottom;
+        const prismFar = prismNear - row.surfDir * row.prismThick;
+        const yTop = Math.min(prismNear, prismFar);
         ctx.save();
         ctx.fillStyle = "#38bdf844";
         ctx.strokeStyle = PALETTE.cyan;
         ctx.lineWidth = 1.5;
-        ctx.shadowColor = PALETTE.cyan;
-        ctx.shadowBlur = 10;
-        ctx.fillRect(x, yTop, row.width, row.thickness);
-        ctx.strokeRect(x, yTop, row.width, row.thickness);
-        ctx.fillStyle = "#e0f2feaa";
-        ctx.fillRect(x + 3, yTop + row.thickness / 2 - 1, Math.max(2, row.width - 6), 2);
+        ctx.fillRect(gx, yTop, row.width, row.prismThick);
+        ctx.strokeRect(gx, yTop, row.width, row.prismThick);
         ctx.restore();
         continue;
       }
-      this.forEachSpike(row, time, (x, {width, height}) => {
-        ctx.fillStyle = "#ad5de9";
-        ctx.beginPath();
-        ctx.moveTo(x, FLOOR);
-        ctx.lineTo(x + width / 2, FLOOR - height);
-        ctx.lineTo(x + width, FLOOR);
-        ctx.fill();
-        ctx.fillStyle = this.insane ? PALETTE.insane : PALETTE.pink;
-        ctx.beginPath();
-        ctx.moveTo(x + width / 2, FLOOR - height);
-        ctx.lineTo(x + width * 0.68, FLOOR);
-        ctx.lineTo(x + width, FLOOR);
-        ctx.fill();
-      });
+
+      this.forEachSpike(row, time, (x, {width, height}) => this.drawSpike(ctx, x, width, height, rSurf, row.surfDir));
     }
     drawSoul(ctx, state, time, "#d185ff");
   }

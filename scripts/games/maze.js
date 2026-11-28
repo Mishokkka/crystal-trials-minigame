@@ -1,4 +1,4 @@
-import {ArenaGame, HEIGHT, PALETTE, WIDTH, clamp, crystal} from "./base.js";
+import {ArenaGame, HEIGHT, PALETTE, WIDTH, clamp, crystal, drawGlow} from "./base.js";
 
 const LEVELS = {
   easy: {width: 54, turns: 3, radius: 29, gates: 0, grabRadius: 24, gatePeriod: [0, 0], gateClosed: [0, 0]},
@@ -291,33 +291,44 @@ export class MazeGame extends ArenaGame {
       const warning = phase > gate.period - 0.20;
       const x = gate.ty * half;
       const y = gate.tx * half;
+      const color = closed ? (this.insane ? PALETTE.insane : "#f688ec") : warning ? PALETTE.gold : "#8be1b993";
       ctx.beginPath();
       ctx.moveTo(gate.x - x, gate.y + y);
       ctx.lineTo(gate.x + x, gate.y - y);
-      ctx.strokeStyle = closed ? (this.insane ? PALETTE.insane : "#f688ec") : warning ? PALETTE.gold : "#8be1b993";
+      ctx.strokeStyle = color;
+      if (closed || warning) {
+        ctx.setLineDash([]);
+        ctx.globalAlpha = 0.26;
+        ctx.lineWidth = closed ? 12 : 7;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      } else {
+        ctx.setLineDash([3, 3]);
+      }
       ctx.lineWidth = closed ? 6 : warning ? 3 : 1.5;
-      ctx.setLineDash(closed || warning ? [] : [3, 3]);
-      ctx.shadowColor = ctx.strokeStyle;
-      ctx.shadowBlur = closed || warning ? 9 : 0;
       ctx.stroke();
     }
-    ctx.shadowBlur = 0;
     ctx.setLineDash([]);
   }
 
-  draw(ctx, time, state, labels, trailOverride) {
+  drawStaticCorridor(ctx, labels) {
     ctx.save();
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
     ctx.beginPath();
     ctx.moveTo(this.path[0].x, this.path[0].y);
-    for (const point of this.path.slice(1)) ctx.lineTo(point.x, point.y);
-    ctx.lineWidth = this.width + 3;
-    ctx.strokeStyle = this.insane ? "#c84b7a" : "#9f6dda";
-    ctx.shadowColor = this.insane ? "#9f1239" : "#7839bc";
-    ctx.shadowBlur = 15;
+    for (let i = 1; i < this.path.length; i++) ctx.lineTo(this.path[i].x, this.path[i].y);
+    const borderColor = this.insane ? "#c84b7a" : "#9f6dda";
+    ctx.strokeStyle = borderColor;
+    ctx.globalAlpha = 0.18;
+    ctx.lineWidth = this.width + 11;
     ctx.stroke();
-    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 0.32;
+    ctx.lineWidth = this.width + 6;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.lineWidth = this.width + 3;
+    ctx.stroke();
     ctx.lineWidth = this.width;
     ctx.strokeStyle = "#241537";
     ctx.stroke();
@@ -326,7 +337,6 @@ export class MazeGame extends ArenaGame {
     ctx.strokeStyle = "#d5a4ff36";
     ctx.stroke();
     ctx.setLineDash([]);
-    this.drawGates(ctx, time);
     for (const [point, color, label] of [[this.origin, PALETTE.mint, labels.start], [this.goal, PALETTE.gold, labels.finish]]) {
       ctx.beginPath();
       ctx.arc(point.x, point.y, GOAL_RADIUS + 1, 0, Math.PI * 2);
@@ -337,23 +347,45 @@ export class MazeGame extends ArenaGame {
       ctx.textAlign = "center";
       ctx.fillText(label, point.x, point.y - this.width / 2 - 10);
     }
+    ctx.restore();
+  }
+
+  draw(ctx, time, state, labels, trailOverride) {
+    if (typeof document !== "undefined") {
+      const scale = clamp(ctx.getTransform?.().a || 1, 1, 1.5);
+      if (!this.staticLayer || this.staticScale !== scale) {
+        this.staticScale = scale;
+        this.staticLayer = document.createElement("canvas");
+        this.staticLayer.width = Math.round(WIDTH * scale);
+        this.staticLayer.height = Math.round(HEIGHT * scale);
+        const sctx = this.staticLayer.getContext("2d");
+        sctx.scale(this.staticLayer.width / WIDTH, this.staticLayer.height / HEIGHT);
+        this.drawStaticCorridor(sctx, labels);
+      }
+      ctx.drawImage(this.staticLayer, 0, 0, WIDTH, HEIGHT);
+    } else {
+      this.drawStaticCorridor(ctx, labels);
+    }
+
+    ctx.save();
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    this.drawGates(ctx, time);
 
     const trail = trailOverride ?? this.trail;
+    ctx.strokeStyle = PALETTE.pink;
     for (let i = 1; i < trail.length; i++) {
       const alpha = i / trail.length;
       ctx.globalAlpha = alpha * 0.69;
-      ctx.strokeStyle = PALETTE.pink;
-      ctx.shadowColor = PALETTE.pink;
-      ctx.shadowBlur = 10;
       ctx.lineWidth = 1 + alpha * 4;
       ctx.beginPath();
       ctx.moveTo(trail[i - 1].x, trail[i - 1].y);
       ctx.lineTo(trail[i].x, trail[i].y);
       ctx.stroke();
     }
-    ctx.shadowBlur = 12;
-    ctx.shadowColor = PALETTE.pink;
+
     ctx.globalAlpha = time < state.invulnerableUntil && Math.floor(time * 18) % 2 ? 0.25 : 1;
+    drawGlow(ctx, state.x, state.y, 18, PALETTE.pink, 0.45);
     if (!state.tracking) {
       ctx.beginPath();
       ctx.arc(state.x, state.y, 15 + Math.sin(time * 7) * 2, 0, Math.PI * 2);

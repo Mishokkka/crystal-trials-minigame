@@ -1,11 +1,38 @@
 import {ArenaGame, HEIGHT, PALETTE, SOUL_RADIUS, WIDTH, drawSoul} from "./base.js";
 
 const LEVELS = {
-  easy: {speed: [340, 360], warning: [0.78, 0.78], width: [24, 28], pause: [0.22, 0.28], continuous: false, dualChance: 0},
-  medium: {speed: [420, 460], warning: [0.62, 0.62], width: [28, 34], pause: [0.16, 0.22], continuous: false, dualChance: 0.15},
-  hard: {speed: [610, 760], warning: [0.38, 0.48], width: [34, 46], pause: [0.14, 0.22], continuous: true, dualChance: 0.28},
-  insane: {speed: [720, 900], warning: [0.30, 0.40], width: [38, 52], pause: [0.10, 0.16], continuous: true, dualChance: 0.42}
+  easy: {speed: [440, 500], warning: [0.50, 0.50], width: [24, 28], pause: [0.06, 0.10], continuous: false, dualChance: 0, ringChance: 0, chainChance: 0.35},
+  medium: {speed: [550, 630], warning: [0.42, 0.42], width: [28, 34], pause: [0.05, 0.09], continuous: false, dualChance: 0.25, ringChance: 0.25, chainChance: 0.48},
+  hard: {speed: [700, 860], warning: [0.32, 0.38], width: [34, 46], pause: [0.04, 0.08], continuous: true, dualChance: 0.38, ringChance: 0.30, chainChance: 0.60},
+  insane: {speed: [840, 1040], warning: [0.25, 0.32], width: [38, 52], pause: [0.03, 0.06], continuous: true, dualChance: 0.50, ringChance: 0.35, chainChance: 0.72}
 };
+
+function drawRingRule(ctx, amber) {
+  const cx = WIDTH / 2;
+  const cy = HEIGHT / 2 - 33;
+  ctx.globalAlpha = 1;
+  ctx.setLineDash([]);
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  if (amber) {
+    for (const offset of [-5, 3]) {
+      ctx.moveTo(cx + offset - 3, cy - 5);
+      ctx.lineTo(cx + offset + 3, cy);
+      ctx.lineTo(cx + offset - 3, cy + 5);
+    }
+  } else {
+    for (const offset of [-3, 3]) {
+      ctx.moveTo(cx + offset, cy - 5);
+      ctx.lineTo(cx + offset, cy + 5);
+    }
+  }
+  ctx.strokeStyle = "#0b0912";
+  ctx.lineWidth = 6;
+  ctx.stroke();
+  ctx.strokeStyle = "#fff";
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+}
 
 export class ResonanceGame extends ArenaGame {
   constructor(session, onEvent) {
@@ -18,79 +45,94 @@ export class ResonanceGame extends ArenaGame {
 
   buildWaves() {
     let amber = this.random() < 0.5;
-    let streak = 0;
-    let prevAmber = null;
-    let prevVertical = null;
-    let prevDirection = null;
-    let start = this.hard || this.insane ? 0.50 : 0.92;
+    let chainCount = 0;
+    let groupEnd = 0;
+    let start = this.hard || this.insane ? 0.36 : 0.50;
 
-    while (start < this.duration - 0.52) {
+    while (start < this.duration - 0.38) {
       const warn = this.between(...this.cfg.warning);
-      if (prevAmber !== null && amber !== prevAmber) {
-        const minSwitchPause = this.insane ? 0.18 : 0.24;
-        const lastEnd = this.waves.at(-1)?.end ?? 0;
-        const sameAxisReverse = prevVertical !== null && prevDirection !== null;
-        if (sameAxisReverse || this.hard || this.insane) {
-          start = Math.max(start, lastEnd + minSwitchPause);
-        }
-      }
-      if (start >= this.duration - 0.52) break;
-
       const cue = Math.max(0.05, start - warn);
-      const vertical = this.random() < 0.5;
-      const dual = this.random() < this.cfg.dualChance;
-      const axes = dual ? [vertical, !vertical] : [vertical];
       let end = start;
 
-      for (const acrossX of axes) {
-        const axis = acrossX ? WIDTH : HEIGHT;
-        const speed = this.between(...this.cfg.speed);
+      if (this.random() < this.cfg.ringChance) {
+        const speed = this.between(...this.cfg.speed) * 0.72;
         const width = this.between(...this.cfg.width);
-        const lag = acrossX === vertical ? 0 : this.between(0.05, 0.12);
-        const waveStart = start + lag;
-        const waveEnd = waveStart + (axis + width * 2) / speed;
-        const dir = this.direction;
+        const waveEnd = start + (305 + width) / speed;
         this.waves.push({
-          cue: cue + lag,
-          start: waveStart,
+          kind: "ring",
+          cue,
+          start,
           end: waveEnd,
-          vertical: acrossX,
-          axis,
           speed,
           width,
           amber,
-          direction: dir,
           resolved: false
         });
-        end = Math.max(end, waveEnd);
-        prevVertical = acrossX;
-        prevDirection = dir;
+        end = waveEnd;
+      } else {
+        const vertical = this.random() < 0.5;
+        const dual = this.random() < this.cfg.dualChance;
+        const axes = dual ? [vertical, !vertical] : [vertical];
+        for (const acrossX of axes) {
+          const axis = acrossX ? WIDTH : HEIGHT;
+          const speed = this.between(...this.cfg.speed);
+          const width = this.between(...this.cfg.width);
+          const lag = acrossX === vertical ? 0 : this.between(0.05, 0.11);
+          const waveStart = start + lag;
+          const waveEnd = waveStart + (axis + width * 2) / speed;
+          this.waves.push({
+            kind: "line",
+            cue: cue + lag,
+            start: waveStart,
+            end: waveEnd,
+            vertical: acrossX,
+            axis,
+            speed,
+            width,
+            amber,
+            direction: this.direction,
+            resolved: false
+          });
+          end = Math.max(end, waveEnd);
+        }
       }
 
       this.cues.push({time: cue, sound: "Telegraph"});
-      prevAmber = amber;
-      start = end + this.between(...this.cfg.pause);
-      if (++streak === 2 || this.random() < 0.68) {
+      groupEnd = Math.max(groupEnd, end);
+      chainCount++;
+
+      // Staggered same-color barrage increases density without conflicting overlaps
+      if (chainCount < 3 && this.random() < this.cfg.chainChance) {
+        start += this.between(0.28, 0.42);
+      } else {
+        const minSwitchPause = this.insane ? 0.14 : this.hard ? 0.18 : 0.14;
         amber = !amber;
-        streak = 0;
+        chainCount = 0;
+        start = Math.max(groupEnd + this.between(...this.cfg.pause), groupEnd + minSwitchPause);
       }
     }
   }
 
   position(wave, time) {
+    if (wave.kind === "ring") return (time - wave.start) * wave.speed - wave.width * 0.5;
     const distance = (time - wave.start) * wave.speed - wave.width;
     return wave.direction === 1 ? distance : wave.axis - distance;
   }
 
   update(dt, time, input) {
-    this.moveFree(dt, input, 218, time);
+    this.moveFree(dt, input, 224, time);
     const inputActive = Math.hypot(input.x, input.y) > 0;
     const movingForAmber = this.state.moving || (inputActive && time - this.lastMoveTime < 0.075);
 
     for (const wave of this.waves) {
       if (wave.resolved || time < wave.start || time >= wave.end) continue;
-      const along = wave.vertical ? this.state.x : this.state.y;
-      if (Math.abs(along - this.position(wave, time)) > wave.width / 2 + SOUL_RADIUS) continue;
+      if (wave.kind === "ring") {
+        const dist = Math.hypot(this.state.x - WIDTH / 2, this.state.y - HEIGHT / 2);
+        if (Math.abs(dist - this.position(wave, time)) > wave.width / 2 + SOUL_RADIUS) continue;
+      } else {
+        const along = wave.vertical ? this.state.x : this.state.y;
+        if (Math.abs(along - this.position(wave, time)) > wave.width / 2 + SOUL_RADIUS) continue;
+      }
       const isMoving = wave.amber ? movingForAmber : this.state.moving;
       const wrong = isMoving !== wave.amber;
       if (!this.cfg.continuous || wrong) wave.resolved = true;
@@ -103,14 +145,68 @@ export class ResonanceGame extends ArenaGame {
       if (time < wave.cue || time >= wave.end) continue;
       const color = wave.amber ? PALETTE.amber : PALETTE.blue;
       const warning = time < wave.start;
-      const center = warning ? (wave.direction === 1 ? 6 : wave.axis - 6) : this.position(wave, time);
-      const thickness = warning ? 8 : wave.width;
 
       ctx.save();
+
+      if (wave.kind === "ring") {
+        const radius = this.position(wave, time);
+        if (warning) {
+          const pulseAlpha = 0.55 + 0.4 * Math.sin(time * 18) ** 2;
+          ctx.strokeStyle = color;
+          ctx.beginPath();
+          ctx.arc(WIDTH / 2, HEIGHT / 2, 22, 0, Math.PI * 2);
+          ctx.lineWidth = 10;
+          ctx.globalAlpha = pulseAlpha * 0.22;
+          ctx.stroke();
+          ctx.lineWidth = 4;
+          ctx.globalAlpha = pulseAlpha;
+          if (!wave.amber) ctx.setLineDash([7, 5]);
+          ctx.stroke();
+        } else {
+          if (radius > 0) {
+            ctx.strokeStyle = color;
+            ctx.beginPath();
+            ctx.arc(WIDTH / 2, HEIGHT / 2, radius, 0, Math.PI * 2);
+            ctx.lineWidth = wave.width + 14;
+            ctx.globalAlpha = 0.14;
+            ctx.stroke();
+
+            ctx.lineWidth = wave.width;
+            ctx.globalAlpha = 0.38;
+            ctx.stroke();
+
+            ctx.globalAlpha = 0.9;
+            ctx.strokeStyle = "#ffffffaa";
+            ctx.lineWidth = 2;
+            if (!wave.amber) ctx.setLineDash([6, 8]);
+            ctx.stroke();
+          } else {
+            const pulseR = Math.max(SOUL_RADIUS, radius + wave.width * 0.5);
+            ctx.fillStyle = color;
+            ctx.globalAlpha = 0.22;
+            ctx.beginPath();
+            ctx.arc(WIDTH / 2, HEIGHT / 2, pulseR + 7, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 0.48;
+            ctx.beginPath();
+            ctx.arc(WIDTH / 2, HEIGHT / 2, pulseR, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+        if (warning || radius < 22) drawRingRule(ctx, wave.amber);
+        ctx.restore();
+        continue;
+      }
+
+      const center = warning ? (wave.direction === 1 ? 6 : wave.axis - 6) : this.position(wave, time);
+      const thickness = warning ? 8 : wave.width;
+      const baseAlpha = warning ? 0.5 + 0.4 * Math.sin(time * 16) ** 2 : 0.42;
       ctx.fillStyle = color;
-      ctx.shadowColor = color;
-      ctx.shadowBlur = 15;
-      ctx.globalAlpha = warning ? 0.5 + 0.4 * Math.sin(time * 16) ** 2 : 0.42;
+      ctx.globalAlpha = warning ? baseAlpha * 0.25 : 0.14;
+      if (wave.vertical) ctx.fillRect(center - (thickness + 14) / 2, 0, thickness + 14, HEIGHT);
+      else ctx.fillRect(0, center - (thickness + 14) / 2, WIDTH, thickness + 14);
+
+      ctx.globalAlpha = baseAlpha;
       if (wave.vertical) ctx.fillRect(center - thickness / 2, 0, thickness, HEIGHT);
       else ctx.fillRect(0, center - thickness / 2, WIDTH, thickness);
 
@@ -118,19 +214,13 @@ export class ResonanceGame extends ArenaGame {
       if (warning) {
         ctx.strokeStyle = color;
         ctx.lineWidth = 2;
-        ctx.setLineDash([10, 6]);
+        if (!wave.amber) ctx.setLineDash([10, 6]);
         ctx.beginPath();
-        if (wave.vertical) {
-          ctx.moveTo(center, 0);
-          ctx.lineTo(center, HEIGHT);
-        } else {
-          ctx.moveTo(0, center);
-          ctx.lineTo(WIDTH, center);
-        }
+        if (wave.vertical) { ctx.moveTo(center, 0); ctx.lineTo(center, HEIGHT); }
+        else { ctx.moveTo(0, center); ctx.lineTo(WIDTH, center); }
         ctx.stroke();
         ctx.setLineDash([]);
       } else {
-        // Core line + intuitive pattern overlay (chevrons for move/amber, freeze bars for still/blue)
         if (wave.vertical) ctx.fillRect(center - 1, 0, 2, HEIGHT);
         else ctx.fillRect(0, center - 1, WIDTH, 2);
 

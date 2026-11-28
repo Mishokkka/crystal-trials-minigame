@@ -34,8 +34,7 @@ dialog.ct-dialog {
   padding: 12px;
   overflow: auto;
   border: 0;
-  background: radial-gradient(ellipse at center, #1e103866 0, #07050bc8 76%);
-  backdrop-filter: blur(5px);
+  background: radial-gradient(ellipse at center, #1a0d30b8 0, #06040ce3 76%);
   color: var(--ct-text);
   color-scheme: dark;
   font: 500 14px/1.3 system-ui, sans-serif;
@@ -67,10 +66,11 @@ dialog.ct-dialog .ct-panel {
   background: linear-gradient(155deg, #21152ef2, #110c1cf7 45%, #190e24f5);
   color: #f5ecff;
   box-shadow:
-    0 0 0 3px #1d112b,
-    0 24px 90px #030207e6,
-    0 0 38px var(--ct-glow),
-    inset 0 1px #ffffff29;
+    0 0 0 2px #1d112b,
+    0 14px 36px #030207cc,
+    0 0 20px var(--ct-glow),
+    inset 0 1px #ffffff26;
+  contain: layout style;
   animation: ct-panel-in 270ms cubic-bezier(.18, .84, .32, 1) both;
 }
 
@@ -92,7 +92,6 @@ dialog.ct-dialog .ct-emblem {
   height: 32px;
   background: conic-gradient(from 0deg at 50% 52%, #edc0ff, #7e40bd, var(--ct-accent), #e879f9, #edc0ff);
   clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
-  filter: drop-shadow(0 0 8px var(--ct-glow));
 }
 
 dialog.ct-dialog .ct-emblem::after {
@@ -145,6 +144,7 @@ dialog.ct-dialog .ct-diff-badge.ct-diff-insane {
   color: #ffe4e6;
   border-color: #ff4d6d99;
   background: linear-gradient(90deg, #9f123988, #be123c88);
+  box-shadow: 0 0 8px #ff4d6d66;
   animation: ct-insane-pulse 1.3s ease-in-out infinite alternate;
 }
 
@@ -284,7 +284,7 @@ dialog.ct-dialog .ct-slot-name {
   color: #f5ecff;
 }
 
-dialog.ct-dialog .ct-health { display: flex; gap: 5px; filter: drop-shadow(0 0 5px #e879f975); flex: 0 0 auto; }
+dialog.ct-dialog .ct-health { display: flex; gap: 5px; flex: 0 0 auto; }
 
 dialog.ct-dialog .ct-pip {
   width: 9px;
@@ -320,6 +320,7 @@ dialog.ct-dialog .ct-timebar-fill {
   width: 100%;
   height: 100%;
   transform-origin: left center;
+  will-change: transform;
   background: linear-gradient(90deg, var(--ct-accent), #f0abfc);
 }
 
@@ -392,7 +393,7 @@ dialog.ct-dialog.ct-closing .ct-panel { animation: ct-panel-out 230ms ease-in bo
 @keyframes ct-pop { from { opacity: 0.35; transform: scale(1.28); } to { opacity: 1; transform: scale(1); } }
 @keyframes ct-go-fade { 0% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1.16); } }
 @keyframes ct-pip-break { 0% { transform: scale(1.55) rotate(-14deg); filter: brightness(2); } 100% { transform: scale(1); } }
-@keyframes ct-insane-pulse { from { box-shadow: 0 0 4px #ff4d6d44; } to { box-shadow: 0 0 12px #ff4d6daa; } }
+@keyframes ct-insane-pulse { from { opacity: 0.78; } to { opacity: 1; } }
 
 /* ==========================================================================
    GM Launcher (#ct-launcher.ct-launcher) — Fully isolated from Foundry themes

@@ -1,6 +1,6 @@
 # Архитектура модуля «Кристальные Испытания: Мини-игры»
 
-Системно-независимый модуль коротких динамичных мини-игр для **Foundry VTT v13 (Core 13.351)** без внешних зависимостей, без сборщика (нативные ES-модули) и без серверного кода.
+Системно-независимый модуль десяти коротких динамичных мини-игр для **Foundry VTT v13 (Core 13.351)** без внешних зависимостей, без сборщика (нативные ES-модули) и без серверного кода.
 
 ## Ключевые ограничения и модель доверия
 
@@ -15,20 +15,20 @@
 - [scripts/main.js](scripts/main.js) — жизненный цикл модуля (`init`, `getSceneControlButtons`, `ready`), регистрация настроек мира/клиента, публичный `api` (`openLauncher`, `start`, `abort`), маршрутизация сокета `module.crystal-trials-minigame`, watchdog отключения/таймаута и публикация итоговой карточки в чат.
 - [scripts/gm-launcher.js](scripts/gm-launcher.js) — окно запуска `GmLauncher` на базе `ApplicationV2` (зафиксированное на `theme-dark`), выбор 1 или 2 игроков (с автоподстановкой владельцев 1–2 выделенных токенов), сохранение последних параметров в памяти сессии, предпросмотр режима/длительности и режим локального теста для GM.
 - [scripts/overlay.js](scripts/overlay.js) — класс `TrialOverlay`: модальный `<dialog>` для 1 или 2 арен рядом, фиксированный шаг симуляции `STEP = 1/120`, перехват клавиатуры и мыши, буферизованная интерполяция наблюдателей, система 2D-частиц, экранная тряска и локальный переключатель громкости.
-- [scripts/sound-manager.js](scripts/sound-manager.js) — регистрация звуковых настроек (`masterVolume`, `muteLocal`, 13 эффектов + зацикленный `Bgm`) и управление проигрыванием через `foundry.audio.AudioHelper`.
-- [scripts/games/index.js](scripts/games/index.js) — реестр 6 режимов и 4 сложностей (`easy`, `medium`, `hard`, `insane`) с длительностями.
+- [scripts/sound-manager.js](scripts/sound-manager.js) — регистрация звуковых настроек (`masterVolume`, `muteLocal`, 14 эффектов + зацикленный `Bgm`) и управление проигрыванием через `foundry.audio.AudioHelper`.
+- [scripts/games/index.js](scripts/games/index.js) — реестр 10 режимов и 4 сложностей (`easy`, `medium`, `hard`, `insane`) с длительностями и пределами прогресса.
 - [scripts/games/base.js](scripts/games/base.js) — база `ArenaGame`, размеры логической арены (`480x360`), детерминированный PRNG `mulberry32`, палитра и общие хелперы отрисовки/урона.
-- [scripts/games/](scripts/games/) — реализации 6 мини-игр: `shards.js`, `resonance.js`, `beams.js`, `gravity.js`, `timing.js`, `maze.js`.
+- [scripts/games/](scripts/games/) — реализации 10 мини-игр: `shards.js`, `resonance.js`, `beams.js`, `gravity.js`, `timing.js`, `maze.js`, `shield.js`, `aim.js`, `sigil.js`, `orbit.js`.
 - [styles/main.css](styles/main.css) — полностью изолированные от темы Foundry стили оверлея (`dialog.ct-dialog`), лаунчера (`#ct-launcher.ct-launcher`) и карточки чата (`.ct-chat-card`).
 - [lang/ru.json](lang/ru.json), [lang/en.json](lang/en.json) — полная двуязычная локализация с паритетом ключей и плейсхолдеров.
-- [tools/generate-sounds.py](tools/generate-sounds.py) и `assets/sounds/*.wav` — офлайн-генератор (Python stdlib) и 13 монофонических 16-bit PCM WAV-эффектов (22050 Гц).
+- [tools/generate-sounds.py](tools/generate-sounds.py) и `assets/sounds/*.ogg` — офлайн-генератор (Python stdlib; для вывода OGG/MP3 требуется `ffmpeg`) и 14 звуковых эффектов в формате OGG Vorbis.
 
 ## Мультиплеер, сокеты и синхронизация
 
 1. **Детерминированная генерация:** при запуске GM генерирует 32-битный `seed`. Все клиенты создают экземпляры мини-игры с `mulberry32(session.seed)`, поэтому препятствия, волны и лабиринт совпадают попиксельно без пересылки объектов по сети.
 2. **Протокол сокета (`module.crystal-trials-minigame`):**
    - `START_GAME` — рассылка параметров сессии (`targets` на 1–2 игрока, режим, сложность, жизни, `seed`, `startAtTimestamp`, `sentAt`).
-   - `PLAYER_STATE` — снимки состояния активного слота (~каждые `50 мс` и мгновенно при событиях `hit`, `timingHit`, `jump`, `finish`) с игровым временем `t`, позицией, жизнями и прогрессом.
+   - `PLAYER_STATE` — снимки состояния активного слота (~каждые `50 мс` и мгновенно при событиях) с игровым временем `t`, позицией, жизнями и прогрессом. Aim передаёт две битовые маски (`aimStruck`, `aimCracked`), где позиция бита соответствует ID цели. Timing передаёт маску попыток и результат конкретной попытки (`hit`, `perfect` или `miss`) отдельно от события потери жизни.
    - `SLOT_END` — завершение конкретной арены (`userId`), отправляемое активным игроком или watchdog активного GM.
    - `ABORT_GAME` — принудительное закрытие испытания у всех клиентов.
 3. **Компенсация часов и гонок:**

@@ -1,17 +1,17 @@
 import {HEIGHT, WIDTH, clamp} from "./games/base.js";
+import {AIM_RULES} from "./games/aim.js";
 import {DIFFICULTIES, GAMES} from "./games/index.js";
-import {TIMING_RULES} from "./games/timing.js";
 import {GmLauncher} from "./gm-launcher.js";
 import {TrialOverlay} from "./overlay.js";
 import {MODULE_ID, SOCKET, element, serverTime, setting, t} from "./shared.js";
-import {registerSoundSettings} from "./sound-manager.js";
+import {preloadSounds, registerSoundSettings} from "./sound-manager.js";
 
 const START_LEAD_MS = 180;
 const WATCHDOG_GRACE_MS = 2500;
 const OBSERVER_GRACE_MS = 2200;
-const WIN_REASONS = ["survived", "timing", "maze"];
+const WIN_REASONS = ["survived", "timing", "maze", "aim", "sigil"];
 const LOSS_REASONS = ["lives", "missed", "timeout", "disconnected"];
-const STATE_EVENTS = ["hit", "timingHit", "jump", "finish"];
+const STATE_EVENTS = ["hit", "timingHit", "timingMiss", "aimStrike", "jump", "block", "finish"];
 
 let current = null;
 let launcher = null;
@@ -342,22 +342,44 @@ function receiveStart(data, sender) {
 }
 
 function receiveState(round, data, senderId) {
-  const {userId, seq, t: simTime, x, y, vx, vy, moving, lives, progress, activeStarted, invulnerableUntil, tracking, event} = data;
+  const {userId, seq, t: simTime, x, y, vx, vy, moving, lives, progress, activeStarted, invulnerableUntil, tracking,
+    attemptsMask, aimStruck, aimCracked, timingStrike, event} = data;
   const slot = round.slots.get(userId);
   if (!slot || senderId !== userId || slot.result || userId === game.user.id) return;
 
   const {gameType, difficulty} = round.session;
-  const maxProgress = gameType === "timing" ? TIMING_RULES[difficulty].count : Number(gameType === "maze");
+  const maxProgress = GAMES[gameType].maxProgress[DIFFICULTIES.indexOf(difficulty)];
   if (!Number.isSafeInteger(seq) || seq <= (slot.snapshot?.seq ?? 0)
     || !isBetween(simTime, 0, round.session.durationSec)
     || !isPosition(data) || !Number.isFinite(vx) || !Number.isFinite(vy) || typeof moving !== "boolean"
     || !Number.isInteger(lives) || !isBetween(lives, 0, round.session.lives)
     || !Number.isInteger(progress) || !isBetween(progress, 0, maxProgress)
     || typeof activeStarted !== "boolean" || !isBetween(invulnerableUntil, 0, round.session.durationSec + 0.75)
-    || (event !== undefined && !STATE_EVENTS.includes(event))) return;
+    || (event != null && !STATE_EVENTS.includes(event))) return;
   if (gameType === "maze" && typeof tracking !== "boolean") return;
+  if (gameType === "timing" && attemptsMask !== undefined
+    && (!Number.isInteger(attemptsMask) || !isBetween(attemptsMask, 0, (1 << maxProgress) - 1))) return;
+  if ((event === "aimStrike" && gameType !== "aim") || (event === "timingMiss" && gameType !== "timing")) return;
+  if (gameType === "aim") {
+    const {count, decoyCount} = AIM_RULES[difficulty];
+    if (!Number.isInteger(aimStruck) || !isBetween(aimStruck, 0, (1 << (count + decoyCount)) - 1)
+      || !Number.isInteger(aimCracked) || !isBetween(aimCracked, 0, (1 << count) - 1)
+      || (aimStruck & aimCracked)) return;
+  }
 
-  slot.snapshot = {seq, t: simTime, x, y, vx, vy, moving, lives, progress, activeStarted, invulnerableUntil, tracking, event};
+  const hasTimingStrike = gameType === "timing" && (event === "timingHit" || event === "timingMiss");
+  if (hasTimingStrike) {
+    const kinds = event === "timingMiss" ? ["miss"] : ["hit", "perfect"];
+    if (!isPosition(timingStrike) || !kinds.includes(timingStrike.kind)) return;
+  }
+
+  slot.snapshot = {seq, t: simTime, x, y, vx, vy, moving, lives, progress, activeStarted, invulnerableUntil, tracking, event: event ?? undefined};
+  if (attemptsMask !== undefined) slot.snapshot.attemptsMask = attemptsMask;
+  if (gameType === "aim") Object.assign(slot.snapshot, {aimStruck, aimCracked});
+  if (hasTimingStrike) {
+    const {x, y, kind} = timingStrike;
+    slot.snapshot.timingStrike = {x, y, kind};
+  }
   round.overlay.receiveState(userId, slot.snapshot);
 }
 
@@ -429,6 +451,7 @@ Hooks.on("getSceneControlButtons", controls => {
 
 Hooks.once("ready", () => {
   ready = true;
+  void preloadSounds();
   game.socket.on(SOCKET, receive);
   game.socket.on("disconnect", () => current?.overlay.close());
   Hooks.on("controlToken", () => launcher?.refreshPlayers(true));
